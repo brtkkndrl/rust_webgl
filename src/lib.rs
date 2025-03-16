@@ -45,12 +45,19 @@ impl Mesh{
         let mut faces : Vec<Face> = vec![];
 
         for line in obj_str.lines() {
-            let words: Vec<&str> = line.split(' ').collect();
+            if line.trim() == "" || line.trim().starts_with("#"){
+                continue;
+            }
 
+            let words: Vec<&str> = line.split(' ').collect();
 
             match words[0].trim() {
                 "v" => 
                 {
+                    // console::log_1(&format!("vec {:?} {:?} {:?}", f32::from_str(words[1].trim()).unwrap(),
+                    // f32::from_str(words[2].trim()).unwrap(),
+                    // f32::from_str(words[3].trim()).unwrap()).into());
+
                     verts.push(Vertex{
                         pos: Vector3::new(
                             f32::from_str(words[1].trim()).unwrap(),
@@ -121,7 +128,7 @@ impl Mesh{
             let v2 = self.verts[face.verts[1] as usize].pos;
             let v3 = self.verts[face.verts[2] as usize].pos;
 
-            let f_normal = (v2 - v1).cross(&(v3-v1));
+            let f_normal = (v2 - v1).cross(&(v3-v1)).normalize();
 
             //console::log_1(&format!("face {:?}", f_normal).into());
 
@@ -140,6 +147,7 @@ pub struct Renderer {
     program: Option<WebGlProgram>,
     vbo: Option<WebGlBuffer>,
     ebo: Option<WebGlBuffer>,
+    ebo_size : i32,
     angle: f32
 }
 
@@ -156,14 +164,14 @@ impl Renderer {
             .unwrap()
             .dyn_into::<web_sys::WebGl2RenderingContext>()?;
 
-        //gl.enable(GL::CULL_FACE);
-        //gl.cull_face(GL::BACK); 
+        gl.enable(GL::CULL_FACE);
+        gl.cull_face(GL::BACK); 
 
         Ok(Renderer{
             gl,
             program : None,
-            vbo : None,
-            ebo : None,
+            vbo : None, ebo : None,
+            ebo_size: 0,
             angle: 0.0
         })
     }
@@ -241,7 +249,7 @@ impl Renderer {
     #[wasm_bindgen]
     pub async fn load_mesh(&mut self) -> Result<(), JsValue>{
         //let mesh = Mesh::simple_triangle_mesh().unwrap();
-        let mesh = Mesh::load_obj("assets/tri.obj").await.unwrap();
+        let mesh = Mesh::load_obj("assets/teapot.obj").await.unwrap();
 
         let (vertices, indices) = mesh.create_primitive_buffers().unwrap();
 
@@ -254,7 +262,6 @@ impl Renderer {
             gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &vertex_array, GL::STATIC_DRAW);
         }
         
-
         let ebo = gl.create_buffer().ok_or("Failed to create element buffer")?;
         gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
         unsafe {
@@ -264,13 +271,15 @@ impl Renderer {
 
         self.vbo = Some(vbo);
         self.ebo = Some(ebo);
-        
+
+        self.ebo_size = indices.len() as i32;
+
         Ok(())
     }
 
     #[wasm_bindgen]
     pub fn update(&mut self) ->Result<(), JsValue>{
-        self.angle += 0.042;
+        self.angle += 0.01;
         Ok(())
     }
 
@@ -281,6 +290,8 @@ impl Renderer {
         
         let vbo = self.vbo.as_ref().unwrap();
         let ebo = self.ebo.as_ref().unwrap();
+
+        let ebo_size = self.ebo_size;
 
         gl.use_program(Some(&program));
 
@@ -342,7 +353,7 @@ impl Renderer {
     
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.clear(GL::COLOR_BUFFER_BIT);
-        gl.draw_elements_with_i32(GL::TRIANGLES, 3, GL::UNSIGNED_SHORT, 0);
+        gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
 
         Ok(())
     }
