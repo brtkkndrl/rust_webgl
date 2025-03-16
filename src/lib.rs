@@ -2,9 +2,137 @@ use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGlShader};
 use web_sys::{window, console, Response};
 use wasm_bindgen_futures::JsFuture;
-use wasm_bindgen_futures::spawn_local;
-extern crate nalgebra_glm as glm;
-use glm::Mat4;
+use std::str::FromStr;
+use nalgebra::{Matrix4, Matrix3, Vector3, UnitQuaternion, Point3};
+
+struct Vertex{
+    pos: Vector3<f32>,
+    normal: Vector3<f32>
+}
+
+struct Face{
+    verts: Vec<u16>
+}
+
+struct Mesh{
+    verts: Vec<Vertex>,
+    faces: Vec<Face>
+}
+
+impl Mesh{
+    pub fn simple_triangle_mesh() -> Result<Mesh, String>{
+        
+        let verts = vec![
+            Vertex{pos: Vector3::new(-0.5, -0.5, 0.0), normal: Vector3::new(0.0, 0.0, 1.0)},
+            Vertex{pos: Vector3::new(0.5, -0.5, 0.0), normal: Vector3::new(0.0, 0.0, 1.0)},
+            Vertex{pos: Vector3::new(0.0,  0.5, 0.0), normal: Vector3::new(0.0, 0.0, 1.0)}
+        ];
+    
+        let faces = vec![
+            Face { verts: vec![0, 1, 2] }
+        ];
+    
+        Ok(Mesh{verts: verts, faces: faces})
+    }
+
+    pub async fn load_obj(path : &str) -> Result<Mesh, JsValue>{
+        let resp = JsFuture::from(window().unwrap().fetch_with_str(path)).await?;
+        let resp: Response = resp.dyn_into().unwrap();
+        let text = JsFuture::from(resp.text()?).await?;
+        let obj_str = text.as_string().unwrap();
+
+        let mut verts : Vec<Vertex> = vec![];
+        let mut faces : Vec<Face> = vec![];
+
+        for line in obj_str.lines() {
+            let words: Vec<&str> = line.split(' ').collect();
+
+
+            match words[0].trim() {
+                "v" => 
+                {
+                    verts.push(Vertex{
+                        pos: Vector3::new(
+                            f32::from_str(words[1].trim()).unwrap(),
+                            f32::from_str(words[2].trim()).unwrap(),
+                            f32::from_str(words[3].trim()).unwrap()
+                        ),
+                        normal: Vector3::new(0.0,0.0,0.0)})
+                },
+                "f" => 
+                {
+                    //console::log_1(&format!("face").into());
+                    let mut temp_verts : Vec<u16> = vec![];
+
+                    for word in &words[1..] {
+                        temp_verts.push(u16::from_str(&word.trim()).unwrap()-1);
+                    }
+                    faces.push(Face{verts: temp_verts});
+                },
+                "" => {},
+                _ => {
+                    console::log_1(&("Can't load obj").into());
+                    return Err(("Can't load obj").into())
+                }
+            }
+        }
+        
+        console::log_1(&format!("loaded {:?}f {:?}v", faces.len(), verts.len()).into());
+        let mut mesh = Mesh{verts: verts, faces: faces};
+        mesh.compute_flatshaded().unwrap();
+        Ok(mesh)
+    }
+
+    pub fn create_primitive_buffers(&self) -> Result<(Vec<f32>, Vec<u16>), String>{
+        let mut verts = vec![];
+        
+        let mut indices = vec![];
+
+        for vert in &(self.verts){
+            verts.push(vert.pos.x);
+            verts.push(vert.pos.y);
+            verts.push(vert.pos.z);
+
+            verts.push(vert.normal.x);
+            verts.push(vert.normal.y);
+            verts.push(vert.normal.z);
+        }
+
+        for face in &(self.faces){
+            if face.verts.len() > 3{
+                for i in 0..face.verts.len()-1{
+                    indices.push(face.verts[0]);
+                    indices.push(face.verts[i]);
+                    indices.push(face.verts[i+1]);
+                }
+            }else{
+                for vert in &(face.verts){
+                    indices.push(*vert);
+                }
+            }
+        }
+
+        Ok((verts, indices))
+    }
+
+    pub fn compute_flatshaded(&mut self) -> Result<(), String>{
+        for face in &(self.faces){
+            let v1 = self.verts[face.verts[0] as usize].pos;
+            let v2 = self.verts[face.verts[1] as usize].pos;
+            let v3 = self.verts[face.verts[2] as usize].pos;
+
+            let f_normal = (v2 - v1).cross(&(v3-v1));
+
+            //console::log_1(&format!("face {:?}", f_normal).into());
+
+            for vert in &(face.verts){
+                self.verts[*vert as usize].normal = f_normal;
+            }
+        }
+        
+        Ok(())
+    }
+}
 
 #[wasm_bindgen]
 pub struct Renderer {
@@ -111,15 +239,11 @@ impl Renderer {
     }
 
     #[wasm_bindgen]
-    pub fn load_mesh(&mut self) -> Result<(), JsValue>{
-        // Define vertex data (x, y, z, nx, ny, nz)
-        let vertices: [f32; 18] = [
-            -0.5, -0.5, 0.0,  0.0, 0.0, 1.0,  // Vertex 1
-            0.5, -0.5, 0.0,  0.0, 0.0, 1.0,  // Vertex 2
-            0.0,  0.5, 0.0,  0.0, 0.0, 1.0,  // Vertex 3
-        ];
+    pub async fn load_mesh(&mut self) -> Result<(), JsValue>{
+        //let mesh = Mesh::simple_triangle_mesh().unwrap();
+        let mesh = Mesh::load_obj("assets/tri.obj").await.unwrap();
 
-        let indices: [u16; 3] = [0, 1, 2];
+        let (vertices, indices) = mesh.create_primitive_buffers().unwrap();
 
         let gl = &(self.gl);
 
@@ -173,24 +297,25 @@ impl Renderer {
         gl.vertex_attrib_pointer_with_i32(normal_attrib, 3, GL::FLOAT, false, 6 * 4, 3 * 4);
         gl.enable_vertex_attrib_array(normal_attrib);
     
-        // Camera Setup
-        let projection = glm::perspective(1.0, 45.0_f32.to_radians(), 0.1, 100.0);
-        let view = glm::look_at(
-            &glm::vec3(0.0, 0.0, 3.0),  // Camera Position
-            &glm::vec3(0.0, 0.0, 0.0),  // Look At
-            &glm::vec3(0.0, 1.0, 0.0),  // Up Vector
+        let projection = Matrix4::new_perspective(45.0f32.to_radians(), 1.0, 0.1, 100.0);
+
+        let view = Matrix4::look_at_rh(
+            &Point3::new(0.0, 0.0, 10.0), // Camera Position
+            &Point3::new(0.0, 0.0, 0.0), // Look At
+            &Vector3::new(0.0, 1.0, 0.0), // Up Vector
         );
-        //let model : Mat4 = glm::identity();
-
-        let model: Mat4 = glm::rotate(&glm::identity(), self.angle, &glm::vec3(0.0, 1.0, 0.0));
-
-        let normal_matrix = glm::mat3(
+        
+        // Model transformation with rotation
+        let model: Matrix4<f32> = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle)
+            .to_homogeneous();
+        
+        // Extract the 3x3 normal matrix
+        let normal_matrix = Matrix3::new(
             model[(0, 0)], model[(0, 1)], model[(0, 2)], // First row
             model[(1, 0)], model[(1, 1)], model[(1, 2)], // Second row
             model[(2, 0)], model[(2, 1)], model[(2, 2)], // Third row
         );
-    
-        // Compute normal matrix (3x3)
+        
         let normal_matrix = normal_matrix.try_inverse().unwrap().transpose();
     
         // Pass Uniforms
@@ -207,7 +332,7 @@ impl Renderer {
         gl.uniform3f(Some(&light_color_loc), 1.0, 1.0, 1.0);
     
         let object_color_loc = gl.get_uniform_location(&program, "objectColor").unwrap();
-        gl.uniform3f(Some(&object_color_loc), 1.0, 0.5, 0.31);
+        gl.uniform3f(Some(&object_color_loc), 1.0, 1.0, 1.0);
     
         let model_loc = gl.get_uniform_location(&program, "model").unwrap();
         gl.uniform_matrix4fv_with_f32_array(Some(&model_loc), false, model.as_slice());
@@ -224,32 +349,8 @@ impl Renderer {
 }
 
 
-#[wasm_bindgen]
-pub async fn load_obj(path : &str) -> Result<(), JsValue> {
-    let resp = JsFuture::from(window().unwrap().fetch_with_str(path)).await?;
-    let resp: Response = resp.dyn_into().unwrap();
-    let text = JsFuture::from(resp.text()?).await?;
-    let obj_str = text.as_string().unwrap();
-
-    // Print each line to the JS console
-    for _line in obj_str.lines() {
-        //console::log_1(&line.into());
-    }
-
-    Ok(())
-}
-
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
-    spawn_local(async {
-        match load_obj("assets/teapot.obj").await {
-            Ok(_) => {}
-            Err(e) => {
-                console::error_1(&e);
-            }
-        } 
-    });
-
     Ok(())
 }
 

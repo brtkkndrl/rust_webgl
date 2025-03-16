@@ -18,19 +18,19 @@
     <script type="module">
         import init, {Renderer} from "./pkg/rust_webgl.js";
         
-        init().then(() => {
+        init().then(async () => {
             let renderer = new Renderer();
 
             renderer.load_shaders();
-            renderer.load_mesh();
+            await renderer.load_mesh();
+
+            requestAnimationFrame(call_anim_frame);
 
             function call_anim_frame() {
                 renderer.update();
                 renderer.render();
                 requestAnimationFrame(call_anim_frame);
             }
-
-            requestAnimationFrame(call_anim_frame);
         }).catch((error) => {
             console.error("Initialization failed:", error);
         });

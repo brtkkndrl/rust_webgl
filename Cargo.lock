@@ -140,18 +140,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nalgebra-glm"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07a3be33aa9aa21ad8959e80cd7435c23c6fe0cc39d0af98bda9a4e486962df2"
-dependencies = [
- "alga",
- "approx",
- "nalgebra",
- "num-traits",
-]
-
-[[package]]
 name = "num-complex"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -321,7 +309,7 @@ version = "0.1.0"
 dependencies = [
  "js-sys",
  "lazy_static",
- "nalgebra-glm",
+ "nalgebra",
  "once_cell",
  "wasm-bindgen",
  "wasm-bindgen-futures",
