@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>WebGL Triangle in Rust</title>
+    <style>
+        #canvas{
+            /*width: 90vw;
+            height: 90vh;*/
+            /*width: 800px;
+            height: 600px;*/
+            margin-left: calc(50% - 600px);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas" width="1200" height="800"></canvas>
+    <script type="module">
+        import init, {anim_frame} from "./pkg/rust_webgl.js";
+        
+        init().then(() => {
+            function call_anim_frame() {
+                anim_frame();
+                requestAnimationFrame(call_anim_frame);
+            }
+
+            requestAnimationFrame(call_anim_frame);
+        }).catch((error) => {
+            console.error("Initialization failed:", error);
+        });
+    </script>
+</body>
+</html>
