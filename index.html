@@ -21,6 +21,8 @@
         init().then(() => {
             let renderer = new Renderer();
 
+            renderer.load_shaders();
+
             function call_anim_frame() {
                 renderer.render();
                 requestAnimationFrame(call_anim_frame);

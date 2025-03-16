@@ -1,5 +1,5 @@
 use wasm_bindgen::prelude::*;
-use web_sys::{WebGl2RenderingContext as GL, WebGlProgram, WebGlShader};
+use web_sys::{WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGlShader};
 use web_sys::{window, console, Response};
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_futures::spawn_local;
@@ -12,7 +12,9 @@ use glm::Mat4;
 #[wasm_bindgen]
 pub struct Renderer {
     gl: GL,
-    program: WebGlProgram,
+    program: Option<WebGlProgram>,
+    vbo: Option<WebGlBuffer>,
+    ebo: Option<WebGlBuffer>
 }
 
 #[wasm_bindgen]
@@ -20,6 +22,18 @@ impl Renderer {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Result<Renderer, JsValue> {
         let gl = get_gl_ctx().unwrap();
+
+        Ok(Renderer{
+            gl,
+            program : None,
+            vbo : None,
+            ebo : None
+        })
+    }
+
+    #[wasm_bindgen]
+    pub fn load_shaders(&mut self) -> Result<(), JsValue>{
+        let gl = &(self.gl);
 
         let vert_shader = compile_shader(
             &gl,
@@ -82,19 +96,22 @@ impl Renderer {
             std::process::exit(1);
         });
 
-        Ok(Renderer{
-            gl,
-            program
-        })
+        self.program = Some(program);
+
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn load_mesh(&mut self) -> Result<(), JsValue>{
+        Ok(())
     }
 
     #[wasm_bindgen]
     pub fn render(&self) -> Result<(), JsValue> {
         let gl = &(self.gl);
-        let program = &(self.program);
+        let program = self.program.as_ref().unwrap();
 
-        gl.use_program(Some(&program));
-
+        gl.use_program(Some(program));
 
         // Define vertex data (x, y, z, nx, ny, nz)
         let vertices: [f32; 18] = [
@@ -170,7 +187,6 @@ impl Renderer {
     
         let normal_loc = gl.get_uniform_location(&program, "normalMatrix").unwrap();
         gl.uniform_matrix3fv_with_f32_array(Some(&normal_loc), false, normal_matrix.as_slice());
-    
     
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
         gl.clear(GL::COLOR_BUFFER_BIT);
