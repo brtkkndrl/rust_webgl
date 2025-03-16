@@ -122,6 +122,40 @@ impl Mesh{
         Ok((verts, indices))
     }
 
+    pub fn create_primitive_buffers_flatshaded(&self) -> Result<(Vec<f32>, Vec<u16>), String>{
+        let mut verts = vec![];
+        
+        let mut indices = vec![];
+
+        //TODO complete this
+
+        // for vert in &(self.verts){
+        //     verts.push(vert.pos.x);
+        //     verts.push(vert.pos.y);
+        //     verts.push(vert.pos.z);
+
+        //     verts.push(vert.normal.x);
+        //     verts.push(vert.normal.y);
+        //     verts.push(vert.normal.z);
+        // }
+
+        // for face in &(self.faces){
+        //     if face.verts.len() > 3{
+        //         for i in 0..face.verts.len()-1{
+        //             indices.push(face.verts[0]);
+        //             indices.push(face.verts[i]);
+        //             indices.push(face.verts[i+1]);
+        //         }
+        //     }else{
+        //         for vert in &(face.verts){
+        //             indices.push(*vert);
+        //         }
+        //     }
+        // }
+
+        Ok((verts, indices))
+    }
+
     pub fn compute_flatshaded(&mut self) -> Result<(), String>{
         for face in &(self.faces){
             let v1 = self.verts[face.verts[0] as usize].pos;
@@ -198,6 +232,7 @@ impl Renderer {
             void main() {
                 FragPos = vec3(model * vec4(aPosition, 1.0));
                 Normal = normalMatrix * aNormal;
+                //Normal = aNormal;
                 gl_Position = projection * view * vec4(FragPos, 1.0);
             }
             ",
@@ -249,7 +284,7 @@ impl Renderer {
     #[wasm_bindgen]
     pub async fn load_mesh(&mut self) -> Result<(), JsValue>{
         //let mesh = Mesh::simple_triangle_mesh().unwrap();
-        let mesh = Mesh::load_obj("assets/teapot.obj").await.unwrap();
+        let mesh = Mesh::load_obj("assets/spheroid.obj").await.unwrap();
 
         let (vertices, indices) = mesh.create_primitive_buffers().unwrap();
 
