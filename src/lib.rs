@@ -4,9 +4,6 @@ use web_sys::{window, console, Response};
 use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_futures::spawn_local;
 extern crate nalgebra_glm as glm;
-use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender, Receiver};
-use lazy_static::lazy_static;
 use glm::Mat4;
 
 #[wasm_bindgen]
@@ -14,20 +11,32 @@ pub struct Renderer {
     gl: GL,
     program: Option<WebGlProgram>,
     vbo: Option<WebGlBuffer>,
-    ebo: Option<WebGlBuffer>
+    ebo: Option<WebGlBuffer>,
+    angle: f32
 }
 
 #[wasm_bindgen]
 impl Renderer {
     #[wasm_bindgen(constructor)]
     pub fn new() -> Result<Renderer, JsValue> {
-        let gl = get_gl_ctx().unwrap();
+        let window = web_sys::window().unwrap();
+        let document = window.document().unwrap();
+        let canvas = document.get_element_by_id("canvas").unwrap();
+        let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into()?;
+        let gl = canvas
+            .get_context("webgl2")?
+            .unwrap()
+            .dyn_into::<web_sys::WebGl2RenderingContext>()?;
+
+        //gl.enable(GL::CULL_FACE);
+        //gl.cull_face(GL::BACK); 
 
         Ok(Renderer{
             gl,
             program : None,
             vbo : None,
-            ebo : None
+            ebo : None,
+            angle: 0.0
         })
     }
 
@@ -103,6 +112,41 @@ impl Renderer {
 
     #[wasm_bindgen]
     pub fn load_mesh(&mut self) -> Result<(), JsValue>{
+        // Define vertex data (x, y, z, nx, ny, nz)
+        let vertices: [f32; 18] = [
+            -0.5, -0.5, 0.0,  0.0, 0.0, 1.0,  // Vertex 1
+            0.5, -0.5, 0.0,  0.0, 0.0, 1.0,  // Vertex 2
+            0.0,  0.5, 0.0,  0.0, 0.0, 1.0,  // Vertex 3
+        ];
+
+        let indices: [u16; 3] = [0, 1, 2];
+
+        let gl = &(self.gl);
+
+        let vbo = gl.create_buffer().ok_or("Failed to create buffer")?;
+        gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
+        unsafe {
+            let vertex_array = js_sys::Float32Array::view(&vertices);
+            gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &vertex_array, GL::STATIC_DRAW);
+        }
+        
+
+        let ebo = gl.create_buffer().ok_or("Failed to create element buffer")?;
+        gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
+        unsafe {
+            let index_array = js_sys::Uint16Array::view(&indices);
+            gl.buffer_data_with_array_buffer_view(GL::ELEMENT_ARRAY_BUFFER, &index_array, GL::STATIC_DRAW);
+        }
+
+        self.vbo = Some(vbo);
+        self.ebo = Some(ebo);
+        
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn update(&mut self) ->Result<(), JsValue>{
+        self.angle += 0.042;
         Ok(())
     }
 
@@ -110,33 +154,14 @@ impl Renderer {
     pub fn render(&self) -> Result<(), JsValue> {
         let gl = &(self.gl);
         let program = self.program.as_ref().unwrap();
+        
+        let vbo = self.vbo.as_ref().unwrap();
+        let ebo = self.ebo.as_ref().unwrap();
 
-        gl.use_program(Some(program));
+        gl.use_program(Some(&program));
 
-        // Define vertex data (x, y, z, nx, ny, nz)
-        let vertices: [f32; 18] = [
-            -0.5, -0.5, 0.0,  0.0, 0.0, 1.0,  // Vertex 1
-             0.5, -0.5, 0.0,  0.0, 0.0, 1.0,  // Vertex 2
-             0.0,  0.5, 0.0,  0.0, 0.0, 1.0,  // Vertex 3
-        ];
-    
-        let indices: [u16; 3] = [0, 1, 2];
-    
-        // Create & Bind VBO
-        let vbo = gl.create_buffer().ok_or("Failed to create buffer")?;
         gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
-        unsafe {
-            let vertex_array = js_sys::Float32Array::view(&vertices);
-            gl.buffer_data_with_array_buffer_view(GL::ARRAY_BUFFER, &vertex_array, GL::STATIC_DRAW);
-        }
-    
-        // Create & Bind EBO
-        let ebo = gl.create_buffer().ok_or("Failed to create element buffer")?;
         gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
-        unsafe {
-            let index_array = js_sys::Uint16Array::view(&indices);
-            gl.buffer_data_with_array_buffer_view(GL::ELEMENT_ARRAY_BUFFER, &index_array, GL::STATIC_DRAW);
-        }
     
         // Enable Position Attribute
         let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
@@ -155,8 +180,10 @@ impl Renderer {
             &glm::vec3(0.0, 0.0, 0.0),  // Look At
             &glm::vec3(0.0, 1.0, 0.0),  // Up Vector
         );
-        let model : Mat4 = glm::identity();
-    
+        //let model : Mat4 = glm::identity();
+
+        let model: Mat4 = glm::rotate(&glm::identity(), self.angle, &glm::vec3(0.0, 1.0, 0.0));
+
         let normal_matrix = glm::mat3(
             model[(0, 0)], model[(0, 1)], model[(0, 2)], // First row
             model[(1, 0)], model[(1, 1)], model[(1, 2)], // Second row
@@ -196,18 +223,6 @@ impl Renderer {
     }
 }
 
-fn get_gl_ctx() -> Result<GL, JsValue> {
-    let window = web_sys::window().unwrap();
-    let document = window.document().unwrap();
-    let canvas = document.get_element_by_id("canvas").unwrap();
-    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into()?;
-    let gl = canvas
-        .get_context("webgl2")?
-        .unwrap()
-        .dyn_into::<web_sys::WebGl2RenderingContext>()?;
-
-    Ok(gl)
-}
 
 #[wasm_bindgen]
 pub async fn load_obj(path : &str) -> Result<(), JsValue> {

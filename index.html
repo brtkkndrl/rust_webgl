@@ -22,8 +22,10 @@
             let renderer = new Renderer();
 
             renderer.load_shaders();
+            renderer.load_mesh();
 
             function call_anim_frame() {
+                renderer.update();
                 renderer.render();
                 requestAnimationFrame(call_anim_frame);
             }
