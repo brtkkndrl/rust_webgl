@@ -7,111 +7,27 @@ extern crate nalgebra_glm as glm;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use lazy_static::lazy_static;
+use glm::Mat4;
 
-pub enum RenderMessage {
-    InitBuffers,
-    Render
+#[wasm_bindgen]
+pub struct Renderer {
+    context: GL,
+    program: WebGlProgram,
 }
 
-pub struct RenderingState {
-    gl: GL,
-    program: Option<WebGlProgram>,
-    vbo: Option<web_sys::WebGlBuffer>,
-    ebo: Option<web_sys::WebGlBuffer>,
-}
 
-impl RenderingState {
-    pub fn new(gl: GL) -> Self {
-        RenderingState {
-            gl,
-            program: None,
-            vbo: None,
-            ebo: None,
-        }
-    }
-
-    // Example function to update the shader program
-    // pub fn set_program(&mut self, program: WebGlProgram) {
-    //     self.program = Some(program);
-    //     if let Some(ref prog) = self.program {
-    //         self.gl.use_program(Some(prog));
-    //     }
-    // }
-
-    // // Example function to set VBO and EBO
-    // pub fn set_buffers(&mut self, vbo: web_sys::WebGlBuffer, ebo: web_sys::WebGlBuffer) {
-    //     self.vbo = Some(vbo);
-    //     self.ebo = Some(ebo);
-    //     if let (Some(ref vbo), Some(ref ebo)) = (self.vbo.as_ref(), self.ebo.as_ref()) {
-    //         self.gl.bind_buffer(GL::ARRAY_BUFFER, Some(vbo));
-    //         self.gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(ebo));
-    //     }
-    // }
-}
-
-async fn render_thread(rx: Receiver<RenderMessage>) {
-    console::log_1(&"Initializing buffers".into());
-
-    let document = web_sys::window().unwrap().document().unwrap();
+fn get_gl_ctx() -> Result<GL, JsValue> {
+    let window = web_sys::window().unwrap();
+    let document = window.document().unwrap();
     let canvas = document.get_element_by_id("canvas").unwrap();
-    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into::<web_sys::HtmlCanvasElement>().unwrap();
+    let canvas: web_sys::HtmlCanvasElement = canvas.dyn_into()?;
     let gl = canvas
-        .get_context("webgl2").unwrap()
+        .get_context("webgl2")?
         .unwrap()
-        .dyn_into::<GL>().unwrap();
+        .dyn_into::<web_sys::WebGl2RenderingContext>()?;
 
-    let mut rendering_state = RenderingState::new(gl);
-
-    loop {
-        match rx.recv() {
-            Ok(RenderMessage::InitBuffers) => {
-                console::log_1(&"Initializing buffers".into());
-            }
-            Ok(RenderMessage::Render) => {
-                console::log_1(&"rendering mesh".into());
-                // gl.clear_color(0.0, 0.0, 0.0, 1.0);
-                // gl.clear(GL::COLOR_BUFFER_BIT);
-                // gl.draw_elements_with_i32(GL::TRIANGLES, 3, GL::UNSIGNED_SHORT, 0);
-            }
-            Err(_) => {
-                break;
-            }
-        }
-    }
+    Ok(gl)
 }
-
-lazy_static! {
-    static ref TX_SENDER: Arc<Mutex<Option<Sender<RenderMessage>>>> = Arc::new(Mutex::new(None));
-}
-
-// #[wasm_bindgen]
-// pub fn get_gl_ctx() -> Result<GL, String> {
-//     // Get the document and canvas element
-//     let document = web_sys::window()
-//         .ok_or("Failed to get window")?
-//         .document()
-//         .ok_or("Failed to get document")?;
-        
-//     let canvas = document
-//         .get_element_by_id("canvas")
-//         .ok_or("Failed to find canvas element")?;
-        
-//     // Cast the element to HtmlCanvasElement
-//     let canvas:  web_sys::HtmlCanvasElement = canvas
-//         .dyn_into::<web_sys::HtmlCanvasElement>()
-//         .map_err(|_| "Failed to cast to HtmlCanvasElement")?;
-    
-//     // Get the WebGL2 context
-//     let gl = canvas
-//         .get_context("webgl2")
-//         .map_err(|_| "Failed to get WebGL2 context")?
-//         .ok_or("WebGL2 context is not available")?
-//         .dyn_into::<GL>()
-//         .map_err(|_| "Failed to cast to WebGl2RenderingContext")?;
-    
-//     Ok(gl)
-// }
-
 // #[wasm_bindgen]
 // pub fn render(){
 //     let gl = get_gl_ctx().unwrap_or_else(|e| {
@@ -163,14 +79,6 @@ pub async fn load_obj(path : &str) -> Result<(), JsValue> {
 #[wasm_bindgen]
 pub fn anim_frame() {
     console::log_1(&"anim frame".into());
-    //update();
-    //render();
-    if let Some(tx) = &*TX_SENDER.lock().unwrap() {
-        //let message = RenderMessage { RenderMessage::Render };
-        tx.send(RenderMessage::Render).unwrap();
-    } else {
-        console::log_1(&"Sender not initialized".into());
-    }
 }
 
 #[wasm_bindgen]
@@ -281,6 +189,16 @@ pub fn init_buffers(gl: &GL) -> Result<(), JsValue> {
         &glm::vec3(0.0, 0.0, 0.0),  // Look At
         &glm::vec3(0.0, 1.0, 0.0),  // Up Vector
     );
+    let model : Mat4 = glm::identity();
+
+    let normal_matrix = glm::mat3(
+        model[(0, 0)], model[(0, 1)], model[(0, 2)], // First row
+        model[(1, 0)], model[(1, 1)], model[(1, 2)], // Second row
+        model[(2, 0)], model[(2, 1)], model[(2, 2)], // Third row
+    );
+
+    // Compute normal matrix (3x3)
+    let normal_matrix = normal_matrix.try_inverse().unwrap().transpose();
 
     // Pass Uniforms
     let proj_loc = gl.get_uniform_location(&program, "projection").unwrap();
@@ -298,33 +216,26 @@ pub fn init_buffers(gl: &GL) -> Result<(), JsValue> {
     let object_color_loc = gl.get_uniform_location(&program, "objectColor").unwrap();
     gl.uniform3f(Some(&object_color_loc), 1.0, 0.5, 0.31);
 
+    let model_loc = gl.get_uniform_location(&program, "model").unwrap();
+    gl.uniform_matrix4fv_with_f32_array(Some(&model_loc), false, model.as_slice());
+
+    let normal_loc = gl.get_uniform_location(&program, "normalMatrix").unwrap();
+    gl.uniform_matrix3fv_with_f32_array(Some(&normal_loc), false, normal_matrix.as_slice());
+
+
+    gl.clear_color(0.0, 0.0, 0.0, 1.0);
+    gl.clear(GL::COLOR_BUFFER_BIT);
+    gl.draw_elements_with_i32(GL::TRIANGLES, 3, GL::UNSIGNED_SHORT, 0);
+
     Ok(())
 
 }
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
-    // init_buffers(&gl).unwrap();
+    let gl = get_gl_ctx().unwrap();
 
-    let (tx, rx) = channel::<RenderMessage>();
-
-    // Store the sender (tx) globally so we can send messages from JS
-    *TX_SENDER.lock().unwrap() = Some(tx);
-
-    // Spawn the render thread
-    // thread::spawn(move || {
-    //     render_thread(rx);
-    // });
-
-    // let (tx, rx) = channel::<RenderMessage>();
-
-    // // Spawn the rendering thread
-    // thread::spawn(move || {
-    //     render_thread(rx, gl);
-    // });
-    spawn_local(async move {
-        render_thread(rx);
-    });
+    init_buffers(&gl).unwrap();
 
     spawn_local(async {
         match load_obj("assets/teapot.obj").await {
