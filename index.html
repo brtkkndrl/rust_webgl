@@ -16,11 +16,13 @@
 <body>
     <canvas id="canvas" width="1200" height="800"></canvas>
     <script type="module">
-        import init, {anim_frame} from "./pkg/rust_webgl.js";
+        import init, {Renderer} from "./pkg/rust_webgl.js";
         
         init().then(() => {
+            let renderer = new Renderer();
+
             function call_anim_frame() {
-                anim_frame();
+                renderer.render();
                 requestAnimationFrame(call_anim_frame);
             }
 
