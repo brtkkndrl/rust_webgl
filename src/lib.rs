@@ -31,7 +31,8 @@ impl Renderer {
             .dyn_into::<web_sys::WebGl2RenderingContext>()?;
 
         gl.enable(GL::CULL_FACE);
-        gl.cull_face(GL::BACK); 
+        gl.cull_face(GL::BACK);
+        gl.enable(web_sys::WebGl2RenderingContext::DEPTH_TEST);
 
         Ok(Renderer{
             gl,
@@ -116,9 +117,9 @@ impl Renderer {
     #[wasm_bindgen]
     pub async fn load_mesh(&mut self) -> Result<(), JsValue>{
         //let mesh = Mesh::simple_triangle_mesh().unwrap();
-        let mesh = Mesh::load_obj("assets/spheroid.obj").await.unwrap();
+        let mesh = Mesh::load_obj("assets/teapot.obj").await.unwrap();
 
-        let (vertices, indices) = mesh.create_primitive_buffers().unwrap();
+        let (vertices, indices) = mesh.create_primitive_buffers_flatshaded().unwrap();
 
         let gl = &(self.gl);
 
@@ -204,7 +205,7 @@ impl Renderer {
         gl.uniform_matrix4fv_with_f32_array(Some(&view_loc), false, view.as_slice());
     
         let light_pos_loc = gl.get_uniform_location(&program, "lightPos").unwrap();
-        gl.uniform3f(Some(&light_pos_loc), 1.2, 1.0, 2.0);
+        gl.uniform3f(Some(&light_pos_loc), 0.0, 0.0, 50.0);
     
         let light_color_loc = gl.get_uniform_location(&program, "lightColor").unwrap();
         gl.uniform3f(Some(&light_color_loc), 1.0, 1.0, 1.0);
@@ -219,7 +220,7 @@ impl Renderer {
         gl.uniform_matrix3fv_with_f32_array(Some(&normal_loc), false, normal_matrix.as_slice());
     
         gl.clear_color(0.0, 0.0, 0.0, 1.0);
-        gl.clear(GL::COLOR_BUFFER_BIT);
+        gl.clear(web_sys::WebGl2RenderingContext::COLOR_BUFFER_BIT | web_sys::WebGl2RenderingContext::DEPTH_BUFFER_BIT);
         gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
 
         Ok(())

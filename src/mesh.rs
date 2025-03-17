@@ -10,6 +10,7 @@ pub struct Vertex{
     normal: Vector3<f32>
 }
 
+#[derive(Clone)]
 pub struct Face{
     verts: Vec<u16>
 }
@@ -86,7 +87,8 @@ impl Mesh{
         
         console::log_1(&format!("loaded {:?}f {:?}v", faces.len(), verts.len()).into());
         let mut mesh = Mesh{verts: verts, faces: faces};
-        mesh.compute_flatshaded().unwrap();
+        mesh.triangulate_faces().unwrap();
+        //mesh.compute_flatshaded().unwrap();
         Ok(mesh)
     }
 
@@ -122,36 +124,55 @@ impl Mesh{
         Ok((verts, indices))
     }
 
-    pub fn create_primitive_buffers_flatshaded(&self) -> Result<(Vec<f32>, Vec<u16>), String>{
-        let mut verts = vec![];
+    pub fn triangulate_faces(&mut self) ->Result<(), String>{
+        let mut new_faces: Vec<Face> = vec![];
         
-        let mut indices = vec![];
+        for face in &(self.faces){
+            if face.verts.len() == 3{
+                new_faces.push(face.clone());
+            }else{
+                let mut indices: Vec<u16> = vec![0, 0, 0];
 
-        //TODO complete this
+                for i in 0..face.verts.len()-1{
+                    indices[0] = face.verts[0];
+                    indices[1] = face.verts[i];
+                    indices[2] = face.verts[i+1];
+                    new_faces.push(Face{verts: indices.clone()});
+                }
+            }
+        }
 
-        // for vert in &(self.verts){
-        //     verts.push(vert.pos.x);
-        //     verts.push(vert.pos.y);
-        //     verts.push(vert.pos.z);
+        self.faces = new_faces;
+        Ok(())
+    }
 
-        //     verts.push(vert.normal.x);
-        //     verts.push(vert.normal.y);
-        //     verts.push(vert.normal.z);
-        // }
+    pub fn create_primitive_buffers_flatshaded(&self) -> Result<(Vec<f32>, Vec<u16>), String>{
+        let mut verts: Vec<f32> = vec![];
+        
+        let mut indices: Vec<u16> = vec![];
 
-        // for face in &(self.faces){
-        //     if face.verts.len() > 3{
-        //         for i in 0..face.verts.len()-1{
-        //             indices.push(face.verts[0]);
-        //             indices.push(face.verts[i]);
-        //             indices.push(face.verts[i+1]);
-        //         }
-        //     }else{
-        //         for vert in &(face.verts){
-        //             indices.push(*vert);
-        //         }
-        //     }
-        // }
+        for face in &(self.faces){
+            let v1 = self.verts[face.verts[0] as usize].pos;
+            let v2 = self.verts[face.verts[1] as usize].pos;
+            let v3 = self.verts[face.verts[2] as usize].pos;
+
+            let f_normal = (v2 - v1).cross(&(v3-v1)).normalize();
+
+            for vert_id in &(face.verts){
+                let vert_pos = self.verts[*vert_id as usize].pos;
+                verts.push(vert_pos.x);
+                verts.push(vert_pos.y);
+                verts.push(vert_pos.z);
+
+                verts.push(f_normal.x);
+                verts.push(f_normal.y);
+                verts.push(f_normal.z);
+
+                indices.push(indices.len() as u16);
+            }
+        }
+
+
 
         Ok((verts, indices))
     }
