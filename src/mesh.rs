@@ -224,34 +224,42 @@ impl Mesh{
 
             let f_normal = (v2 - v1).cross(&(v3-v1)).normalize();
 
-            let last_vert_id: u16;
+            let final_tri: (u16, u16, u16);
 
             if is_used[face.verts[2] as usize]{ // duplicate vertex
                 // TODO try rearanging
-                
-                last_vert_id = (verts.len() / vert_attr_count) as u16; // set to the last element, before pushing the vert!
+                if !is_used[face.verts[0] as usize] {
+                    final_tri = (face.verts[1], face.verts[2], face.verts[0]);
+                    // is_used[face.verts[0] as usize] = true;
+                } else if !is_used[face.verts[1] as usize] {
+                    final_tri = (face.verts[2], face.verts[0], face.verts[1]);
+                    // is_used[face.verts[1] as usize] = true;
+                } else{
+                    final_tri = (face.verts[2], face.verts[0], (verts.len() / vert_attr_count) as u16);// set to the last element, before pushing the vert!
 
-                verts.push(self.verts[face.verts[2] as usize].pos.x);
-                verts.push(self.verts[face.verts[2] as usize].pos.y);
-                verts.push(self.verts[face.verts[2] as usize].pos.z);
-                verts.push(f_normal.x);
-                verts.push(f_normal.y);
-                verts.push(f_normal.z);
+                    verts.push(self.verts[face.verts[2] as usize].pos.x);
+                    verts.push(self.verts[face.verts[2] as usize].pos.y);
+                    verts.push(self.verts[face.verts[2] as usize].pos.z);
+                    verts.push(f_normal.x);
+                    verts.push(f_normal.y);
+                    verts.push(f_normal.z);
 
-                console::log_1(&("duplicating").into());
+                    console::log_1(&("duplicating").into());
+                }
             }else{
                 is_used[face.verts[2] as usize] = true;
-                last_vert_id = face.verts[2];
+                final_tri = (face.verts[0], face.verts[1], face.verts[2]);
                 // update desired normal
-                let arr_index = (last_vert_id as usize)*vert_attr_count;
-                verts[arr_index+3] = f_normal.x;
-                verts[arr_index+4] = f_normal.y;
-                verts[arr_index+5] = f_normal.z;
             }
             
-            indices.push(face.verts[0]);
-            indices.push(face.verts[1]);
-            indices.push(last_vert_id);
+            let arr_index = (final_tri.2 as usize)*vert_attr_count;
+            verts[arr_index+3] = f_normal.x;
+            verts[arr_index+4] = f_normal.y;
+            verts[arr_index+5] = f_normal.z;
+
+            indices.push(final_tri.0);
+            indices.push(final_tri.1);
+            indices.push(final_tri.2);
         }
 
         Ok((verts, indices))
