@@ -59,13 +59,12 @@ impl Renderer {
             uniform mat4 model;
             uniform mat3 normalMatrix;
     
-            out vec3 Normal;
+            flat out vec3 Normal;
             out vec3 FragPos;
     
             void main() {
                 FragPos = vec3(model * vec4(aPosition, 1.0));
                 Normal = normalMatrix * aNormal;
-                //Normal = aNormal;
                 gl_Position = projection * view * vec4(FragPos, 1.0);
             }
             ",
@@ -80,7 +79,7 @@ impl Renderer {
             "#version 300 es
             precision mediump float;
     
-            in vec3 Normal;
+            flat in vec3 Normal;
             in vec3 FragPos;
             out vec4 outColor;
     
@@ -117,7 +116,9 @@ impl Renderer {
     #[wasm_bindgen]
     pub async fn load_mesh(&mut self) -> Result<(), JsValue>{
         //let mesh = Mesh::simple_triangle_mesh().unwrap();
-        let mesh = Mesh::load_obj("assets/teapot.obj").await.unwrap();
+        let mesh_str = fetch_resource_as_str("assets/teapot.obj").await.unwrap();
+
+        let mesh = Mesh::load_obj(&mesh_str).await.unwrap();
 
         let (vertices, indices) = mesh.create_primitive_buffers_flatshaded().unwrap();
 
@@ -141,6 +142,8 @@ impl Renderer {
         self.ebo = Some(ebo);
 
         self.ebo_size = indices.len() as i32;
+
+        console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
 
         Ok(())
     }
@@ -225,6 +228,14 @@ impl Renderer {
 
         Ok(())
     }
+}
+
+pub async fn fetch_resource_as_str(path : &str) -> Result<String, JsValue>{
+    let resp = JsFuture::from(window().unwrap().fetch_with_str(path)).await?;
+    let resp: Response = resp.dyn_into().unwrap();
+    let text = JsFuture::from(resp.text()?).await?;
+    let obj_str = text.as_string().unwrap();
+    Ok(obj_str)
 }
 
 
