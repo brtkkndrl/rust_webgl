@@ -228,14 +228,14 @@ impl Mesh{
 
             if is_used[face.verts[2] as usize]{ // duplicate vertex
                 // TODO try rearanging
-                if !is_used[face.verts[0] as usize] {
-                    final_tri = (face.verts[1], face.verts[2], face.verts[0]);
-                    // is_used[face.verts[0] as usize] = true;
-                } else if !is_used[face.verts[1] as usize] {
-                    final_tri = (face.verts[2], face.verts[0], face.verts[1]);
-                    // is_used[face.verts[1] as usize] = true;
-                } else{
-                    final_tri = (face.verts[2], face.verts[0], (verts.len() / vert_attr_count) as u16);// set to the last element, before pushing the vert!
+                // if !is_used[face.verts[0] as usize] {
+                //     final_tri = (face.verts[1], face.verts[2], face.verts[0]);
+                //     is_used[face.verts[0] as usize] = true;
+                // } else if !is_used[face.verts[1] as usize] {
+                //     final_tri = (face.verts[2], face.verts[0], face.verts[1]);
+                //     is_used[face.verts[1] as usize] = true;
+                // } else{
+                    final_tri = (face.verts[0], face.verts[1], (verts.len() / vert_attr_count) as u16);// set to the last element, before pushing the vert!
 
                     verts.push(self.verts[face.verts[2] as usize].pos.x);
                     verts.push(self.verts[face.verts[2] as usize].pos.y);
@@ -245,7 +245,7 @@ impl Mesh{
                     verts.push(f_normal.z);
 
                     console::log_1(&("duplicating").into());
-                }
+                // }
             }else{
                 is_used[face.verts[2] as usize] = true;
                 final_tri = (face.verts[0], face.verts[1], face.verts[2]);

@@ -116,7 +116,7 @@ impl Renderer {
     #[wasm_bindgen]
     pub async fn load_mesh(&mut self) -> Result<(), JsValue>{
         //let mesh = Mesh::simple_triangle_mesh().unwrap();
-        let mesh_str = fetch_resource_as_str("assets/teapot.obj").await.unwrap();
+        let mesh_str = fetch_resource_as_str("assets/gear.obj").await.unwrap();
 
         let mesh = Mesh::load_obj(&mesh_str).await.unwrap();
 
