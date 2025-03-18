@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGlShader};
 use web_sys::{window, console, Response};
 use wasm_bindgen_futures::JsFuture;
-use nalgebra::{Matrix4, Matrix3, Vector3, UnitQuaternion, Point3};
+use nalgebra::{clamp, Matrix3, Matrix4, Point3, UnitQuaternion, Vector3};
 
 mod mesh;
 use mesh::Mesh;
@@ -14,7 +14,13 @@ pub struct Renderer {
     vbo: Option<WebGlBuffer>,
     ebo: Option<WebGlBuffer>,
     ebo_size : i32,
-    angle: f32
+    angle_x: f32,
+    angle_y: f32,
+    mouse_anchor: (i32, i32),
+    is_mouse_down: bool,
+    angle_anchor_x: f32,
+    angle_anchor_y: f32,
+    zoom_level: f32
 }
 
 #[wasm_bindgen]
@@ -39,7 +45,13 @@ impl Renderer {
             program : None,
             vbo : None, ebo : None,
             ebo_size: 0,
-            angle: 0.0
+            angle_x: 0.0,
+            angle_y: 0.0,
+            mouse_anchor: (0,0),
+            is_mouse_down: false,
+            angle_anchor_x: 0.0,
+            angle_anchor_y: 0.0,
+            zoom_level: 10.0
         })
     }
 
@@ -149,8 +161,26 @@ impl Renderer {
     }
 
     #[wasm_bindgen]
-    pub fn update(&mut self) ->Result<(), JsValue>{
-        self.angle += 0.01;
+    pub fn update(&mut self, mouse_down: bool, mouse_x: i32, mouse_y: i32, mouse_wheel: i32) ->Result<(), JsValue>{
+        if mouse_down{
+            if !self.is_mouse_down{ // set anchor
+                self.mouse_anchor = (mouse_x, mouse_y);
+                self.angle_anchor_y = self.angle_y;
+                self.angle_anchor_x = self.angle_x;
+            } else { // move
+                self.angle_x = self.angle_anchor_x + ((-mouse_y + self.mouse_anchor.1) as f32) * 0.0069;
+                self.angle_y = self.angle_anchor_y + ((mouse_x - self.mouse_anchor.0) as f32) * 0.0069;
+            }
+        }
+        self.is_mouse_down = mouse_down;
+
+
+
+        self.zoom_level += (mouse_wheel as f32) * 0.5;
+        self.zoom_level = self.zoom_level.clamp(0.0, 50.0);
+
+        // console::log_1(&format!("displaying mesh {:?}", mouse_wheel).into());
+
         Ok(())
     }
 
@@ -182,14 +212,16 @@ impl Renderer {
         let projection = Matrix4::new_perspective(45.0f32.to_radians(), 1.0, 0.1, 100.0);
 
         let view = Matrix4::look_at_rh(
-            &Point3::new(0.0, 0.0, 10.0), // Camera Position
+            &Point3::new(0.0, 0.0, self.zoom_level), // Camera Position
             &Point3::new(0.0, 0.0, 0.0), // Look At
             &Vector3::new(0.0, 1.0, 0.0), // Up Vector
         );
         
         // Model transformation with rotation
-        let model: Matrix4<f32> = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle)
-            .to_homogeneous();
+        let rotation_x = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), self.angle_x);
+        let rotation_y = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y);
+        
+        let model: Matrix4<f32> = (rotation_y * rotation_x).to_homogeneous();
         
         // Extract the 3x3 normal matrix
         let normal_matrix = Matrix3::new(
@@ -237,7 +269,6 @@ pub async fn fetch_resource_as_str(path : &str) -> Result<String, JsValue>{
     let obj_str = text.as_string().unwrap();
     Ok(obj_str)
 }
-
 
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {

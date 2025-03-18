@@ -26,9 +26,21 @@
 
             requestAnimationFrame(call_anim_frame);
 
+            let mouseX = 0, mouseY = 0, mouseDown = false, mouseWheel = 0;
+            document.addEventListener("wheel", (e) => mouseWheel = Math.sign(e.deltaY));
+            document.addEventListener("mousedown", (e) => mouseDown = true);//TODO needs event
+            document.addEventListener("mouseup", (e) => mouseDown = false);//TODO needs event
+            document.addEventListener("mousemove", (e) => {
+                mouseX = e.clientX;
+                mouseY = e.clientY;
+            });
+
             function call_anim_frame() {
-                renderer.update();
+                renderer.update(mouseDown, mouseX, mouseY, mouseWheel);
                 renderer.render();
+
+                mouseWheel = 0;
+
                 requestAnimationFrame(call_anim_frame);
             }
         }).catch((error) => {

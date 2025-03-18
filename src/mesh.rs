@@ -244,7 +244,7 @@ impl Mesh{
                     verts.push(f_normal.y);
                     verts.push(f_normal.z);
 
-                    console::log_1(&("duplicating").into());
+                    // console::log_1(&("duplicating").into());
                 // }
             }else{
                 is_used[face.verts[2] as usize] = true;
