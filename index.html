@@ -17,9 +17,19 @@
     </style>
     <script>
         let renderer = null;
+        let is_renderer_free = true;
 
-        function loadModel(model){
-            renderer.load_model(model);
+        function loadModel(modelPath) {
+            is_renderer_free = false;
+            fetch(`assets/${modelPath}`)
+                .then(response => response.text())
+                .then(modelData => {
+                    renderer.load_model(modelData);
+                    is_renderer_free = true;
+                })
+                .catch(error => {
+                    console.error("Error loading model:", error);
+                });
         }
     </script>
 </head>
@@ -43,7 +53,7 @@
             renderer = new Renderer();
 
             renderer.load_shaders();
-            await renderer.load_model("teapot.obj");
+            loadModel("teapot.obj");
 
             requestAnimationFrame(call_anim_frame);
 
@@ -57,8 +67,10 @@
             });
 
             function call_anim_frame() {
-                renderer.update(mouseDown, mouseX, mouseY, mouseWheel);
-                renderer.render();
+                if(is_renderer_free){
+                    renderer.update(mouseDown, mouseX, mouseY, mouseWheel);
+                    renderer.render();
+                }
 
                 mouseWheel = 0;
 

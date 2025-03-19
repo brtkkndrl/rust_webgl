@@ -126,11 +126,11 @@ impl Renderer {
     }
 
     #[wasm_bindgen]
-    pub async fn load_model(&mut self, path: String) -> Result<(), JsValue>{
+    pub fn load_model(&mut self, mesh_str: String) -> Result<(), JsValue>{
         //let mesh = Mesh::simple_triangle_mesh().unwrap();
-        let mesh_str = fetch_resource_as_str(&format!("assets/{}", path)).await.unwrap();
+        // let mesh_str = fetch_resource_as_str(&format!("assets/{}", path)).await.unwrap();
 
-        let mesh = Mesh::load_obj(&mesh_str).await.unwrap();
+        let mesh = Mesh::load_obj(&mesh_str).unwrap();
 
         let (vertices, indices) = mesh.create_primitive_buffers_flatshaded().unwrap();
 
@@ -177,7 +177,6 @@ impl Renderer {
             }
         }
         self.is_mouse_down = mouse_down;
-
 
 
         self.zoom_level += (mouse_wheel as f32) * 0.5;

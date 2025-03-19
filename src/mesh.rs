@@ -38,7 +38,7 @@ impl Mesh{
         Ok(Mesh{verts: verts, faces: faces, is_triangulated: true})
     }
 
-    pub async fn load_obj(obj_str: &String) -> Result<Mesh, &str>{
+    pub fn load_obj(obj_str: &String) -> Result<Mesh, &str>{
         let mut verts : Vec<Vertex> = vec![];
         let mut faces : Vec<Face> = vec![];
 
