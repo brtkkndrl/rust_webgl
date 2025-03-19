@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <title>WebGL Triangle in Rust</title>
     <style>
+        body{
+            background-color: #444;
+        }
         #canvas{
             /*width: 90vw;
             height: 90vh;*/
@@ -12,17 +15,35 @@
             margin-left: calc(50% - 600px);
         }
     </style>
+    <script>
+        let renderer = null;
+
+        function loadModel(model){
+            renderer.load_model(model);
+        }
+    </script>
 </head>
 <body>
     <canvas id="canvas" width="1200" height="800"></canvas>
+
+    <div id = "menu">
+        <form>
+            <label for="models">Load model:</label>
+            <select id="models" name="models" onchange="loadModel(this.value)">
+              <option value="teapot.obj">teapot.obj</option>
+              <option value="gear.obj">gear.obj</option>
+            </select>
+          </form>
+    </div>
+
     <script type="module">
         import init, {Renderer} from "./pkg/rust_webgl.js";
         
         init().then(async () => {
-            let renderer = new Renderer();
+            renderer = new Renderer();
 
             renderer.load_shaders();
-            await renderer.load_mesh();
+            await renderer.load_model("teapot.obj");
 
             requestAnimationFrame(call_anim_frame);
 

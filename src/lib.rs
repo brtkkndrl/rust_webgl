@@ -2,7 +2,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGlShader};
 use web_sys::{window, console, Response};
 use wasm_bindgen_futures::JsFuture;
-use nalgebra::{clamp, Matrix3, Matrix4, Point3, UnitQuaternion, Vector3};
+use nalgebra::{clamp, Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2, Unit};
 
 mod mesh;
 use mesh::Mesh;
@@ -126,9 +126,9 @@ impl Renderer {
     }
 
     #[wasm_bindgen]
-    pub async fn load_mesh(&mut self) -> Result<(), JsValue>{
+    pub async fn load_model(&mut self, path: String) -> Result<(), JsValue>{
         //let mesh = Mesh::simple_triangle_mesh().unwrap();
-        let mesh_str = fetch_resource_as_str("assets/gear.obj").await.unwrap();
+        let mesh_str = fetch_resource_as_str(&format!("assets/{}", path)).await.unwrap();
 
         let mesh = Mesh::load_obj(&mesh_str).await.unwrap();
 
@@ -168,8 +168,12 @@ impl Renderer {
                 self.angle_anchor_y = self.angle_y;
                 self.angle_anchor_x = self.angle_x;
             } else { // move
-                self.angle_x = self.angle_anchor_x + ((-mouse_y + self.mouse_anchor.1) as f32) * 0.0069;
-                self.angle_y = self.angle_anchor_y + ((mouse_x - self.mouse_anchor.0) as f32) * 0.0069;
+                let mouse_vec = Vector2::new(
+                    (self.mouse_anchor.0 - mouse_x) as f32, 
+                    (self.mouse_anchor.1 - mouse_y) as f32);
+
+                self.angle_x = self.angle_anchor_x + (-mouse_vec.y as f32) * 0.0069;
+                self.angle_y = self.angle_anchor_y + (-mouse_vec.x as f32) * 0.0069;
             }
         }
         self.is_mouse_down = mouse_down;
@@ -217,12 +221,14 @@ impl Renderer {
             &Vector3::new(0.0, 1.0, 0.0), // Up Vector
         );
         
-        // Model transformation with rotation
+        //TODO calculate movement size from anchor to new mouse pos distance
+        //TODO calculate rotation axis (perpendicular to mouse movement, swap coords)
+
         let rotation_x = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), self.angle_x);
         let rotation_y = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y);
         
-        let model: Matrix4<f32> = (rotation_y * rotation_x).to_homogeneous();
-        
+        let model: Matrix4<f32> = rotation_y.to_homogeneous() * rotation_x.to_homogeneous();
+
         // Extract the 3x3 normal matrix
         let normal_matrix = Matrix3::new(
             model[(0, 0)], model[(0, 1)], model[(0, 2)], // First row
