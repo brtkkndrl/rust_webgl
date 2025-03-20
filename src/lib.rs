@@ -1,4 +1,4 @@
-use shaders::{FSHADER_FLAT, FSHADER_INTERPOLATE, VSHADER_FLAT, VSHADER_INTERPOLATE};
+use shaders::{FSHADER_FLAT, FSHADER_SMOOTH, VSHADER_FLAT, VSHADER_SMOOTH};
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGlShader};
 use web_sys::{window, console, Response};
@@ -8,6 +8,12 @@ use nalgebra::{clamp, Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2
 mod mesh;
 use mesh::Mesh;
 mod shaders;
+
+#[derive(PartialEq, Eq)]
+enum ShadingType{
+    smooth,
+    flat
+}
 
 #[wasm_bindgen]
 pub struct Renderer {
@@ -22,7 +28,8 @@ pub struct Renderer {
     is_mouse_down: bool,
     angle_anchor_x: f32,
     angle_anchor_y: f32,
-    zoom_level: f32
+    zoom_level: f32,
+    current_shading: ShadingType
 }
 
 #[wasm_bindgen]
@@ -53,7 +60,8 @@ impl Renderer {
             is_mouse_down: false,
             angle_anchor_x: 0.0,
             angle_anchor_y: 0.0,
-            zoom_level: 10.0
+            zoom_level: 10.0,
+            current_shading: ShadingType::smooth
         })
     }
 
@@ -64,7 +72,7 @@ impl Renderer {
         let vert_shader = compile_shader(
             &gl,
             GL::VERTEX_SHADER,
-            VSHADER_INTERPOLATE,
+            VSHADER_SMOOTH,
         ).unwrap_or_else(|e| {
             console::log_1(&format!("Error compiling shader: {:?}", e).into());
             panic!();
@@ -73,7 +81,7 @@ impl Renderer {
         let frag_shader = compile_shader(
             &gl,
             GL::FRAGMENT_SHADER,
-            FSHADER_INTERPOLATE,
+            FSHADER_SMOOTH,
         ).unwrap_or_else(|e| {
             console::log_1(&format!("Error compiling shader: {:?}", e).into());
             std::process::exit(1);
@@ -91,6 +99,8 @@ impl Renderer {
 
     #[wasm_bindgen]
     pub fn load_model(&mut self, mesh_str: String) -> Result<(), JsValue>{
+        //TODO should destroy previous buffers if any exist
+
         //let mesh = Mesh::simple_triangle_mesh().unwrap();
         // let mesh_str = fetch_resource_as_str(&format!("assets/{}", path)).await.unwrap();
 
@@ -121,6 +131,29 @@ impl Renderer {
 
         console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
 
+        Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn change_shading(&mut self, shading: String) -> Result<(), String>{
+        // console::log_1(&format!("{:?}", shading).into());
+        match shading.as_str() {
+            "smooth" => {
+                if self.current_shading == ShadingType::smooth {
+                    return Ok(());
+                }
+                
+            },
+            "flat" => {
+                if self.current_shading == ShadingType::flat {
+                    return Ok(());
+                }
+                
+            },
+            _ => {
+                return Err(format!("Unrecognized shading {}", shading).into());
+            }
+        }
         Ok(())
     }
 

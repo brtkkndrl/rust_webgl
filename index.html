@@ -20,6 +20,10 @@
         let is_renderer_free = true;
 
         function loadModel(modelPath) {
+            if(!is_renderer_free){
+                return;
+            }
+
             is_renderer_free = false;
             fetch(`assets/${modelPath}`)
                 .then(response => response.text())
@@ -31,6 +35,15 @@
                     console.error("Error loading model:", error);
                 });
         }
+
+        function changeShading(shading){
+            if(!is_renderer_free){
+                return;
+            }
+            is_renderer_free = false;
+            renderer.change_shading(shading);
+            is_renderer_free = true;
+        }
     </script>
 </head>
 <body>
@@ -38,12 +51,24 @@
 
     <div id = "menu">
         <form>
-            <label for="models">Load model:</label>
-            <select id="models" name="models" onchange="loadModel(this.value)">
-              <option value="teapot.obj">teapot.obj</option>
-              <option value="gear.obj">gear.obj</option>
-            </select>
-          </form>
+        <label for="models">Load model:</label>
+        <select id="models" name="models" onchange="loadModel(this.value)">
+            <option value="teapot.obj">teapot.obj</option>
+            <option value="gear.obj">gear.obj</option>
+        </select>
+        </form>
+
+        <form>
+            <label>
+                Shading:
+            </label>
+            <label>
+                <input type="radio" name="shading" value="smooth" checked onchange="changeShading(this.value)"> Smooth
+            </label>
+            <label>
+                <input type="radio" name="shading" value="flat" onchange="changeShading(this.value)"> Flat
+            </label>
+        </form>
     </div>
 
     <script type="module">
