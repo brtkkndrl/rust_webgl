@@ -90,6 +90,7 @@ impl Mesh{
         
         console::log_1(&format!("loaded {:?}v {:?}f", verts.len(), faces.len()).into());
         let mut mesh = Mesh{verts: verts, faces: faces, is_triangulated: is_triangulated};
+        mesh.derrive_normals_from_faces().unwrap();
         mesh.triangulate_faces().unwrap();
         //mesh.compute_flatshaded().unwrap();
         Ok(mesh)
@@ -152,45 +153,6 @@ impl Mesh{
         self.faces = new_faces;
         self.is_triangulated = true;
         Ok(())
-    }
-
-    pub fn create_primitive_buffers_flatshaded_redundant(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
-        if !self.is_triangulated{
-            return Err("Mesh is not triangulated");
-        }
-
-        let mut verts: Vec<f32> = vec![];
-        
-        let mut indices: Vec<u16> = vec![];
-
-        for face in &(self.faces){
-            let v1 = self.verts[face.verts[0] as usize].pos;
-            let v2 = self.verts[face.verts[1] as usize].pos;
-            let v3 = self.verts[face.verts[2] as usize].pos;
-
-            let f_normal = (v2 - v1).cross(&(v3-v1)).normalize();
-
-            for vert_id in &(face.verts){
-                let vert_pos = self.verts[*vert_id as usize].pos;
-                verts.push(vert_pos.x);
-                verts.push(vert_pos.y);
-                verts.push(vert_pos.z);
-
-                if *vert_id == face.verts[2]{
-                    verts.push(f_normal.x);
-                    verts.push(f_normal.y);
-                    verts.push(f_normal.z);
-                }else{
-                    verts.push(0.0);
-                    verts.push(0.0);
-                    verts.push(0.0);
-                }
-
-                indices.push(indices.len() as u16);
-            }
-        }
-
-        Ok((verts, indices))
     }
 
     pub fn create_primitive_buffers_flatshaded(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
@@ -265,11 +227,12 @@ impl Mesh{
         Ok((verts, indices))
     }
 
-    pub fn compute_flatshaded(&mut self) -> Result<(), &str>{
-        if !self.is_triangulated{
-            return Err("Mesh is not triangulated");
+    /// fills in vert normals from face normals
+    pub fn derrive_normals_from_faces(&mut self) -> Result<(), &str>{
+        for vert in &mut self.verts{
+            vert.normal = Vector3::zeros();
         }
-        
+
         for face in &(self.faces){
             let v1 = self.verts[face.verts[0] as usize].pos;
             let v2 = self.verts[face.verts[1] as usize].pos;
@@ -277,13 +240,15 @@ impl Mesh{
 
             let f_normal = (v2 - v1).cross(&(v3-v1)).normalize();
 
-            //console::log_1(&format!("face {:?}", f_normal).into());
-
             for vert in &(face.verts){
-                self.verts[*vert as usize].normal = f_normal;
+                self.verts[*vert as usize].normal += f_normal;
             }
         }
-        
+
+        for vert in &mut self.verts{
+            vert.normal.normalize();
+        }
+
         Ok(())
     }
 }

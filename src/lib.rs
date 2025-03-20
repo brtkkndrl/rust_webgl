@@ -1,3 +1,4 @@
+use shaders::{FSHADER_FLAT, FSHADER_INTERPOLATE, VSHADER_FLAT, VSHADER_INTERPOLATE};
 use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGlShader};
 use web_sys::{window, console, Response};
@@ -6,6 +7,7 @@ use nalgebra::{clamp, Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2
 
 mod mesh;
 use mesh::Mesh;
+mod shaders;
 
 #[wasm_bindgen]
 pub struct Renderer {
@@ -62,54 +64,16 @@ impl Renderer {
         let vert_shader = compile_shader(
             &gl,
             GL::VERTEX_SHADER,
-            "#version 300 es
-            layout(location = 0) in vec3 aPosition;
-            layout(location = 1) in vec3 aNormal;
-    
-            uniform mat4 projection;
-            uniform mat4 view;
-            uniform mat4 model;
-            uniform mat3 normalMatrix;
-    
-            flat out vec3 Normal;
-            out vec3 FragPos;
-    
-            void main() {
-                FragPos = vec3(model * vec4(aPosition, 1.0));
-                Normal = normalMatrix * aNormal;
-                gl_Position = projection * view * vec4(FragPos, 1.0);
-            }
-            ",
+            VSHADER_INTERPOLATE,
         ).unwrap_or_else(|e| {
             console::log_1(&format!("Error compiling shader: {:?}", e).into());
-            std::process::exit(1);
+            panic!();
         });
     
         let frag_shader = compile_shader(
             &gl,
             GL::FRAGMENT_SHADER,
-            "#version 300 es
-            precision mediump float;
-    
-            flat in vec3 Normal;
-            in vec3 FragPos;
-            out vec4 outColor;
-    
-            uniform vec3 lightPos;
-            uniform vec3 lightColor;
-            uniform vec3 objectColor;
-    
-            void main() {
-                float ambientStrength = 0.1;
-                vec3 ambient = objectColor * ambientStrength;
-    
-                vec3 lightDir = normalize(lightPos - FragPos);
-                float diff = max(dot(normalize(Normal), lightDir), 0.0);
-                vec3 diffuse = diff * lightColor;
-    
-                outColor = vec4((ambient + diffuse) * objectColor, 1.0);
-            }
-            ",
+            FSHADER_INTERPOLATE,
         ).unwrap_or_else(|e| {
             console::log_1(&format!("Error compiling shader: {:?}", e).into());
             std::process::exit(1);
@@ -132,7 +96,7 @@ impl Renderer {
 
         let mesh = Mesh::load_obj(&mesh_str).unwrap();
 
-        let (vertices, indices) = mesh.create_primitive_buffers_flatshaded().unwrap();
+        let (vertices, indices) = mesh.create_primitive_buffers().unwrap();
 
         let gl = &(self.gl);
 
