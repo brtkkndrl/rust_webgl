@@ -118,6 +118,7 @@ pub struct Renderer {
     angle_y: f32,
     mouse_anchor: (i32, i32),
     is_mouse_down: bool,
+    is_bb_visible: bool,
     angle_anchor_x: f32,
     angle_anchor_y: f32,
     zoom_level: f32,
@@ -160,6 +161,7 @@ impl Renderer {
             angle_y: 0.0,
             mouse_anchor: (0,0),
             is_mouse_down: false,
+            is_bb_visible: false,
             angle_anchor_x: 0.0,
             angle_anchor_y: 0.0,
             zoom_level: 10.0
@@ -170,7 +172,7 @@ impl Renderer {
     pub fn load_model(&mut self, mesh_str: String) -> Result<(), JsValue>{
         let gl = &(self.gl);
         
-        let mut shading = ShadingType::Smooth;
+        let mut shading = ShadingType::Flat;
 
         if let Some(current_mesh) = self.rendered_mesh.take(){ // delete old gl buffers
             current_mesh.gl_buffers.delete(gl);
@@ -199,6 +201,12 @@ impl Renderer {
         self.gl.viewport(0, 0, self.canvas.width() as i32, self.canvas.height() as i32);
 
         return Ok(());
+    }
+
+    #[wasm_bindgen]
+    pub fn set_bb_visible(&mut self, visible: bool) -> Result<(), JsValue>{
+        self.is_bb_visible = visible;
+        Ok(())
     }
 
     #[wasm_bindgen]
@@ -351,8 +359,7 @@ impl Renderer {
             gl.clear(web_sys::WebGl2RenderingContext::COLOR_BUFFER_BIT | web_sys::WebGl2RenderingContext::DEPTH_BUFFER_BIT);
             gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
 
-            //render bounding box
-            {
+            if(self.is_bb_visible){            //render bounding box
                 let bb_vbo = &rendered_mesh.bb_gl_buffers.vbo;
                 let bb_ebo = &rendered_mesh.bb_gl_buffers.ebo;
 

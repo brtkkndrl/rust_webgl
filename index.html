@@ -52,6 +52,15 @@
             renderer.change_shading(shading);
             is_renderer_free = true;
         }
+
+        function setBBVisible(visible){
+            if(!is_renderer_free){
+                return;
+            }
+            is_renderer_free = false;
+            renderer.set_bb_visible(visible);
+            is_renderer_free = true;
+        }
     </script>
 </head>
 <body>
@@ -71,16 +80,16 @@
                 Shading:
             </label>
             <label>
-                <input type="radio" name="shading" value="smooth" checked onchange="changeShading(this.value)"> Smooth
+                <input type="radio" name="shading" value="flat" checked onchange="changeShading(this.value)"> Flat
             </label>
             <label>
-                <input type="radio" name="shading" value="flat" onchange="changeShading(this.value)"> Flat
+                <input type="radio" name="shading" value="smooth" onchange="changeShading(this.value)"> Smooth
             </label>
         </form>
 
         <form>
             <label for="bounding_box">show bounds: </label>
-            <input type="checkbox" id = "bounding_box">
+            <input type="checkbox" id = "bounding_box" onchange="setBBVisible(this.checked)">
         </form>
     </div> 
 
