@@ -1,6 +1,6 @@
 use shaders::{FSHADER_FLAT, FSHADER_SMOOTH, VSHADER_FLAT, VSHADER_SMOOTH};
 use wasm_bindgen::prelude::*;
-use web_sys::{WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGl2RenderingContext, WebGlShader};
+use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as GL, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader};
 use web_sys::{window, console, Response};
 use wasm_bindgen_futures::JsFuture;
 use nalgebra::{Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2};
@@ -88,6 +88,7 @@ impl ShaderPrograms{
 #[wasm_bindgen]
 pub struct Renderer {
     gl: GL,
+    canvas : HtmlCanvasElement,
     programs: ShaderPrograms,
     angle_x: f32,
     angle_y: f32,
@@ -128,6 +129,7 @@ impl Renderer {
 
         Ok(Renderer{
             gl,
+            canvas,
             programs: programs,
             rendered_mesh: None,
             angle_x: 0.0,
@@ -167,6 +169,20 @@ impl Renderer {
         console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
 
         Ok(())
+    }
+
+    #[wasm_bindgen]
+    pub fn resize_context(&mut self) -> Result<(), String>{
+
+        let canvas_dom_width = self.canvas.client_width();
+        let canvas_dom_height = self.canvas.client_height();
+
+        self.canvas.set_width(canvas_dom_width as u32);
+        self.canvas.set_height(canvas_dom_height as u32);
+
+        self.gl.viewport(0, 0, self.canvas.width() as i32, self.canvas.height() as i32);
+
+        return Ok(());
     }
 
     #[wasm_bindgen]
