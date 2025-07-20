@@ -81,3 +81,31 @@ void main() {
 
     outColor = vec4((ambient + diffuse) * objectColor, 1.0);
 }";
+
+pub const VSHADER_LINE: &str = 
+"#version 300 es
+layout(location = 0) in vec3 aPosition;
+
+uniform mat4 projection;
+uniform mat4 view;
+uniform mat4 model;
+
+out vec3 FragPos;
+
+void main() {
+    FragPos = vec3(model * vec4(aPosition, 1.0));
+    gl_Position = projection * view * vec4(FragPos, 1.0);
+}";
+
+pub const FSHADER_LINE: &str = 
+"#version 300 es
+precision mediump float;
+
+in vec3 FragPos;
+out vec4 outColor;
+
+uniform vec3 objectColor;
+
+void main() {
+    outColor = vec4(objectColor, 1.0);
+}";

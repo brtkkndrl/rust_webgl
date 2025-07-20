@@ -14,4 +14,3 @@
 - create camera abstraction, enable rotation with mouse around the object
 - display object bounding box
 - move object pivot into the center of bounding box
-- make canvas fullscreen
