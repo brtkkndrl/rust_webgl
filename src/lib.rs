@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGl2RenderingContext, WebGlShader};
 use web_sys::{window, console, Response};
 use wasm_bindgen_futures::JsFuture;
-use nalgebra::{clamp, Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2, Unit};
+use nalgebra::{Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2};
 
 mod mesh;
 use mesh::Mesh;
@@ -11,8 +11,8 @@ mod shaders;
 
 #[derive(PartialEq, Eq)]
 enum ShadingType{
-    smooth,
-    flat
+    Smooth,
+    Flat
 }
 
 struct RenderedMesh{
@@ -33,8 +33,8 @@ impl RenderedMesh{
         self.delete_gl_buffers(gl);
 
         let (vertices, indices) = match self.shading {
-            ShadingType::flat => self.mesh.create_primitive_buffers_flatshaded().unwrap(),
-            ShadingType::smooth => self.mesh.create_primitive_buffers().unwrap()
+            ShadingType::Flat => self.mesh.create_primitive_buffers_flatshaded().unwrap(),
+            ShadingType::Smooth => self.mesh.create_primitive_buffers().unwrap()
         };
 
         let (vbo, ebo) = RenderedMesh::create_gl_buffers(&vertices, &indices, gl).unwrap();
@@ -153,7 +153,7 @@ impl Renderer {
         // let (vbo, ebo) = Renderer::create_gl_buffers(&vertices, &indices, gl).unwrap();
 
         self.rendered_mesh = Some(
-            RenderedMesh { mesh: mesh, shading: ShadingType::smooth, vbo: vbo, ebo: ebo, ebo_size: indices.len() as i32 }
+            RenderedMesh { mesh: mesh, shading: ShadingType::Smooth, vbo: vbo, ebo: ebo, ebo_size: indices.len() as i32 }
         );
 
         console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
@@ -171,16 +171,16 @@ impl Renderer {
         if let Some(ref mut rendered_mesh) = self.rendered_mesh{
             match shading.as_str() {
                 "smooth" => {
-                    if rendered_mesh.shading == ShadingType::smooth {
+                    if rendered_mesh.shading == ShadingType::Smooth {
                         return Ok(());
                     }
-                    rendered_mesh.shading = ShadingType::smooth;
+                    rendered_mesh.shading = ShadingType::Smooth;
                 },
                 "flat" => {
-                    if rendered_mesh.shading == ShadingType::flat {
+                    if rendered_mesh.shading == ShadingType::Flat {
                         return Ok(());
                     }
-                    rendered_mesh.shading = ShadingType::flat;
+                    rendered_mesh.shading = ShadingType::Flat;
                 },
                 _ => {
                     return Err(format!("Unrecognized shading: {}", shading).into());
@@ -233,8 +233,8 @@ impl Renderer {
             let ebo_size = rendered_mesh.ebo_size;
 
             let program = match rendered_mesh.shading{
-                ShadingType::flat => {&self.programs.program_flat},
-                ShadingType::smooth => {&self.programs.program_smooth}
+                ShadingType::Flat => {&self.programs.program_flat},
+                ShadingType::Smooth => {&self.programs.program_smooth}
             };
 
             gl.use_program(Some(program));

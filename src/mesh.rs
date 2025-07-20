@@ -1,10 +1,6 @@
-use nalgebra::{Matrix4, Matrix3, Vector3, UnitQuaternion, Point3};
-use std::array;
+use nalgebra::{Vector3};
 use std::str::FromStr;
-use wasm_bindgen::prelude::*;
-use web_sys::{WebGl2RenderingContext as GL, WebGlBuffer, WebGlProgram, WebGlShader};
-use web_sys::{window, console, Response};
-use wasm_bindgen_futures::JsFuture;
+use web_sys::{console};
 
 pub struct Vertex{
     pos: Vector3<f32>,
