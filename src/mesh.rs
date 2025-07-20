@@ -13,7 +13,9 @@ pub struct Face{
 pub struct Mesh{
     verts: Vec<Vertex>,
     faces: Vec<Face>,
-    is_triangulated: bool
+    is_triangulated: bool,
+    bb_min: Vector3<f32>,
+    bb_max: Vector3<f32>
 }
 
 impl Mesh{
@@ -29,7 +31,7 @@ impl Mesh{
             Face { verts: vec![0, 1, 2] }
         ];
     
-        Ok(Mesh{verts: verts, faces: faces, is_triangulated: true})
+        Ok(Mesh{verts: verts, faces: faces, is_triangulated: true, bb_min: Vector3::new(0.0,0.0,0.0), bb_max: Vector3::new(0.0,0.0,0.0)})
     }
 
     pub fn load_obj(obj_str: &String) -> Result<Mesh, &str>{
@@ -83,9 +85,10 @@ impl Mesh{
         }
         
         console::log_1(&format!("loaded {:?}v {:?}f", verts.len(), faces.len()).into());
-        let mut mesh = Mesh{verts: verts, faces: faces, is_triangulated: is_triangulated};
+        let mut mesh = Mesh{verts: verts, faces: faces, is_triangulated: is_triangulated, bb_min: Vector3::new(0.0,0.0,0.0), bb_max: Vector3::new(0.0,0.0,0.0)};
         mesh.derrive_normals_from_faces().unwrap();
         mesh.triangulate_faces().unwrap();
+        mesh.move_pivot_to_center();
         //mesh.compute_flatshaded().unwrap();
         Ok(mesh)
     }
@@ -126,10 +129,9 @@ impl Mesh{
         Ok((verts, indices))
     }
 
-    pub fn create_bb_primitive_buffers(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
-        let mut verts = vec![];
-        let mut indices = vec![];
 
+
+    fn compute_bounds(&self) -> (Vector3<f32>, Vector3<f32>){
         let (mut min_x, mut min_y, mut min_z) =  (INFINITY, INFINITY, INFINITY);
         let (mut max_x, mut max_y, mut max_z) =  (NEG_INFINITY, NEG_INFINITY, NEG_INFINITY);
 
@@ -142,6 +144,16 @@ impl Mesh{
             max_y = max_y.max(vert.pos.y);
             max_z = max_z.max(vert.pos.z);
         }
+
+        return (Vector3::new(min_x, min_y, min_z), Vector3::new(max_x, max_y, max_z));
+    }
+
+    pub fn create_bb_primitive_buffers(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
+        let mut verts = vec![];
+        let mut indices = vec![];
+
+        let (min_x, min_y, min_z) = (self.bb_min.x, self.bb_min.y, self.bb_min.z);
+        let (max_x, max_y, max_z) = (self.bb_max.x, self.bb_max.y, self.bb_max.z);
 
         //
 
@@ -163,6 +175,19 @@ impl Mesh{
         ]);
 
         Ok((verts, indices))
+    }
+
+    pub fn move_pivot_to_center(&mut self) {
+        let (bb_min, bb_max) = self.compute_bounds();
+        let bb_center = (bb_max + bb_min) / 2.0;
+
+         for vert in &mut (self.verts){
+            // pos
+            vert.pos -= bb_center;
+        }
+
+        self.bb_min = bb_min-bb_center;
+        self.bb_max = bb_max-bb_center;
     }
 
     pub fn triangulate_faces(&mut self) ->Result<(), &str>{

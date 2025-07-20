@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as GL, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader};
 use web_sys::{window, console, Response};
 use wasm_bindgen_futures::JsFuture;
-use nalgebra::{Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2};
+use nalgebra::{Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2, Translation3};
 
 mod mesh;
 use mesh::Mesh;
@@ -319,8 +319,10 @@ impl Renderer {
             let rotation_x = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), self.angle_x);
             let rotation_y = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y);
             
-            let model: Matrix4<f32> = rotation_y.to_homogeneous() * rotation_x.to_homogeneous();
+            //let model: Matrix4<f32> = rotation_y.to_homogeneous() * rotation_x.to_homogeneous();
 
+            let model = Translation3::new(0.0, 0.0, 0.0).to_homogeneous();
+            
             // Extract the 3x3 normal matrix
             let normal_matrix = Matrix3::new(
                 model[(0, 0)], model[(0, 1)], model[(0, 2)], // First row
