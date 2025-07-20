@@ -20,7 +20,8 @@ enum ShadingType{
 struct RenderedMesh{
     mesh: Mesh,
     shading: ShadingType,
-    gl_buffers: GLBuffers
+    gl_buffers: GLBuffers,
+    bb_gl_buffers: Option<GLBuffers> // bounding box gl buffers
 }
 
 struct GLBuffers{
@@ -55,7 +56,13 @@ impl GLBuffers{
 }
 
 impl RenderedMesh{
-    pub fn reload_buffers_from_mesh(&mut self, gl: &WebGl2RenderingContext)-> Result<(), String> {
+    pub fn create(gl: &WebGl2RenderingContext, mesh: Mesh) -> Result<RenderedMesh, String>{
+        let (vertices, indices) = mesh.create_primitive_buffers().unwrap();
+        let gl_buffers = GLBuffers::create(&vertices, &indices, gl).unwrap();
+        return Ok(RenderedMesh { mesh: mesh, shading: ShadingType::Smooth, gl_buffers: gl_buffers, bb_gl_buffers: None });
+    }
+
+    pub fn reload_gl_buffers(&mut self, gl: &WebGl2RenderingContext)-> Result<(), String> {
         self.gl_buffers.delete(gl);
 
         let (vertices, indices) = match self.shading {
@@ -160,21 +167,9 @@ impl Renderer {
 
         let mesh = Mesh::load_obj(&mesh_str).unwrap();
 
-        // let (vertices, indices) = match self.shading {
-        //     ShadingType::flat => self.mesh.create_primitive_buffers().unwrap(),
-        //     ShadingType::smooth => self.mesh.create_primitive_buffers().unwrap()
-        // };
-        let (vertices, indices) = mesh.create_primitive_buffers().unwrap();
+        self.rendered_mesh = Some(RenderedMesh::create(gl, mesh)?);
 
-        let gl_buffers = GLBuffers::create(&vertices, &indices, gl).unwrap();
-
-        // let (vbo, ebo) = Renderer::create_gl_buffers(&vertices, &indices, gl).unwrap();
-
-        self.rendered_mesh = Some(
-            RenderedMesh { mesh: mesh, shading: ShadingType::Smooth, gl_buffers: gl_buffers }
-        );
-
-        console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
+        //console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
 
         Ok(())
     }
@@ -218,7 +213,7 @@ impl Renderer {
                     return Err(format!("Unrecognized shading: {}", shading).into());
                 }
             }
-            rendered_mesh.reload_buffers_from_mesh(&self.gl)?;
+            rendered_mesh.reload_gl_buffers(&self.gl)?;
         }
         Ok(())
     }
