@@ -56,10 +56,14 @@ impl GLBuffers{
 }
 
 impl RenderedMesh{
-    pub fn create(gl: &WebGl2RenderingContext, mesh: Mesh) -> Result<RenderedMesh, String>{
-        let (vertices, indices) = mesh.create_primitive_buffers().unwrap();
+    pub fn create(gl: &WebGl2RenderingContext, mesh: Mesh, shading: ShadingType) -> Result<RenderedMesh, String>{
+        let (vertices, indices) = match shading {
+            ShadingType::Flat => mesh.create_primitive_buffers_flatshaded().unwrap(),
+            ShadingType::Smooth => mesh.create_primitive_buffers().unwrap()
+        };
+
         let gl_buffers = GLBuffers::create(&vertices, &indices, gl).unwrap();
-        return Ok(RenderedMesh { mesh: mesh, shading: ShadingType::Smooth, gl_buffers: gl_buffers, bb_gl_buffers: None });
+        return Ok(RenderedMesh { mesh: mesh, shading: shading, gl_buffers: gl_buffers, bb_gl_buffers: None });
     }
 
     pub fn reload_gl_buffers(&mut self, gl: &WebGl2RenderingContext)-> Result<(), String> {
@@ -161,13 +165,16 @@ impl Renderer {
     pub fn load_model(&mut self, mesh_str: String) -> Result<(), JsValue>{
         let gl = &(self.gl);
         
+        let mut shading = ShadingType::Smooth;
+
         if let Some(current_mesh) = self.rendered_mesh.take(){ // delete old gl buffers
             current_mesh.gl_buffers.delete(gl);
+            shading = current_mesh.shading;
         }
 
         let mesh = Mesh::load_obj(&mesh_str).unwrap();
 
-        self.rendered_mesh = Some(RenderedMesh::create(gl, mesh)?);
+        self.rendered_mesh = Some(RenderedMesh::create(gl, mesh, shading)?);
 
         //console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
 
