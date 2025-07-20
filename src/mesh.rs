@@ -1,7 +1,6 @@
 use nalgebra::{Vector3};
 use std::str::FromStr;
 use web_sys::{console};
-
 pub struct Vertex{
     pos: Vector3<f32>,
     normal: Vector3<f32>
@@ -11,7 +10,6 @@ pub struct Vertex{
 pub struct Face{
     verts: Vec<u16>
 }
-
 pub struct Mesh{
     verts: Vec<Vertex>,
     faces: Vec<Face>,

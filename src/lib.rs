@@ -197,18 +197,17 @@ impl Renderer {
             if !self.is_mouse_down{ // set anchor
                 self.mouse_anchor = (mouse_x, mouse_y);
                 self.angle_anchor_y = self.angle_y;
-                self.angle_anchor_x = self.angle_x;
+                //self.angle_anchor_x = self.angle_x;
             } else { // move
                 let mouse_vec = Vector2::new(
                     (self.mouse_anchor.0 - mouse_x) as f32, 
                     (self.mouse_anchor.1 - mouse_y) as f32);
 
-                self.angle_x = self.angle_anchor_x + (-mouse_vec.y as f32) * 0.0069;
+                //self.angle_x = self.angle_anchor_x + (-mouse_vec.y as f32) * 0.0069;
                 self.angle_y = self.angle_anchor_y + (-mouse_vec.x as f32) * 0.0069;
             }
         }
         self.is_mouse_down = mouse_down;
-
 
         self.zoom_level += (mouse_wheel as f32) * 0.5;
         self.zoom_level = self.zoom_level.clamp(0.0, 50.0);
