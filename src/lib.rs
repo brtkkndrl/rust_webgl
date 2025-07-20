@@ -21,7 +21,7 @@ struct RenderedMesh{
     mesh: Mesh,
     shading: ShadingType,
     gl_buffers: GLBuffers,
-    bb_gl_buffers: Option<GLBuffers> // bounding box gl buffers
+    bb_gl_buffers: GLBuffers // bounding box gl buffers
 }
 
 struct GLBuffers{
@@ -58,12 +58,17 @@ impl GLBuffers{
 impl RenderedMesh{
     pub fn create(gl: &WebGl2RenderingContext, mesh: Mesh, shading: ShadingType) -> Result<RenderedMesh, String>{
         let (vertices, indices) = match shading {
-            ShadingType::Flat => mesh.create_primitive_buffers_flatshaded().unwrap(),
-            ShadingType::Smooth => mesh.create_primitive_buffers().unwrap()
+            ShadingType::Flat => mesh.create_primitive_buffers_flatshaded()?,
+            ShadingType::Smooth => mesh.create_primitive_buffers()?
         };
 
-        let gl_buffers = GLBuffers::create(&vertices, &indices, gl).unwrap();
-        return Ok(RenderedMesh { mesh: mesh, shading: shading, gl_buffers: gl_buffers, bb_gl_buffers: None });
+        let gl_buffers = GLBuffers::create(&vertices, &indices, &gl)?;
+
+        let (bb_vertices, bb_indices) = mesh.create_bb_primitive_buffers()?;
+    
+        let bb_gl_buffers = GLBuffers::create(&bb_vertices, &bb_indices, &gl)?;
+        
+        return Ok(RenderedMesh { mesh: mesh, shading: shading, gl_buffers: gl_buffers, bb_gl_buffers: bb_gl_buffers });
     }
 
     pub fn reload_gl_buffers(&mut self, gl: &WebGl2RenderingContext)-> Result<(), String> {
@@ -169,6 +174,7 @@ impl Renderer {
 
         if let Some(current_mesh) = self.rendered_mesh.take(){ // delete old gl buffers
             current_mesh.gl_buffers.delete(gl);
+            current_mesh.bb_gl_buffers.delete(gl);
             shading = current_mesh.shading;
         }
 
@@ -251,6 +257,20 @@ impl Renderer {
         Ok(())
     }
 
+    fn pass_mvp_uniforms(&self, gl: &WebGl2RenderingContext, program: &WebGlProgram, model: &Matrix4<f32>, view: &Matrix4<f32>, projection: &Matrix4<f32>) -> Result<(), String>{    
+        // Pass Uniforms
+        let proj_loc = gl.get_uniform_location(program, "projection").unwrap();
+        gl.uniform_matrix4fv_with_f32_array(Some(&proj_loc), false, projection.as_slice());
+    
+        let view_loc = gl.get_uniform_location(program, "view").unwrap();
+        gl.uniform_matrix4fv_with_f32_array(Some(&view_loc), false, view.as_slice());
+    
+        let model_loc = gl.get_uniform_location(program, "model").unwrap();
+        gl.uniform_matrix4fv_with_f32_array(Some(&model_loc), false, model.as_slice());
+
+        Ok(())
+    }
+
     #[wasm_bindgen]
     pub fn render(&self) -> Result<(), JsValue> {
         if self.rendered_mesh.is_none() {
@@ -309,14 +329,13 @@ impl Renderer {
             );
             
             let normal_matrix = normal_matrix.try_inverse().unwrap().transpose();
-        
-            // Pass Uniforms
-            let proj_loc = gl.get_uniform_location(&program, "projection").unwrap();
-            gl.uniform_matrix4fv_with_f32_array(Some(&proj_loc), false, projection.as_slice());
-        
-            let view_loc = gl.get_uniform_location(&program, "view").unwrap();
-            gl.uniform_matrix4fv_with_f32_array(Some(&view_loc), false, view.as_slice());
-        
+
+            // Pass uniforms
+            self.pass_mvp_uniforms(&gl, &program, &model, &view, &projection)?;
+
+            let normal_loc = gl.get_uniform_location(program, "normalMatrix").unwrap();
+            gl.uniform_matrix3fv_with_f32_array(Some(&normal_loc), false, normal_matrix.as_slice());
+
             let light_pos_loc = gl.get_uniform_location(&program, "lightPos").unwrap();
             gl.uniform3f(Some(&light_pos_loc), 0.0, 0.0, 50.0);
         
@@ -325,16 +344,37 @@ impl Renderer {
         
             let object_color_loc = gl.get_uniform_location(&program, "objectColor").unwrap();
             gl.uniform3f(Some(&object_color_loc), 1.0, 1.0, 1.0);
-        
-            let model_loc = gl.get_uniform_location(&program, "model").unwrap();
-            gl.uniform_matrix4fv_with_f32_array(Some(&model_loc), false, model.as_slice());
-        
-            let normal_loc = gl.get_uniform_location(&program, "normalMatrix").unwrap();
-            gl.uniform_matrix3fv_with_f32_array(Some(&normal_loc), false, normal_matrix.as_slice());
-        
+
             gl.clear_color(0.0, 0.0, 0.0, 1.0);
             gl.clear(web_sys::WebGl2RenderingContext::COLOR_BUFFER_BIT | web_sys::WebGl2RenderingContext::DEPTH_BUFFER_BIT);
             gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
+
+            //render bounding box
+            {
+                let bb_vbo = &rendered_mesh.bb_gl_buffers.vbo;
+                let bb_ebo = &rendered_mesh.bb_gl_buffers.ebo;
+
+                let bb_ebo_size = rendered_mesh.bb_gl_buffers.ebo_size;
+
+                let bb_program = &self.programs.program_lines;
+
+                gl.use_program(Some(bb_program));
+
+                gl.bind_buffer(GL::ARRAY_BUFFER, Some(&bb_vbo));
+                gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&bb_ebo));
+
+                let bb_pos_attrib = gl.get_attrib_location(&bb_program, "aPosition") as u32;
+                gl.vertex_attrib_pointer_with_i32(bb_pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
+                gl.enable_vertex_attrib_array(bb_pos_attrib);
+
+                let bb_object_color_loc = gl.get_uniform_location(&bb_program, "objectColor").unwrap();
+                gl.uniform3f(Some(&bb_object_color_loc), 1.0, 0.0, 0.0);
+
+                self.pass_mvp_uniforms(&gl, &bb_program, &model, &view, &projection)?;
+
+                gl.line_width(10.0);
+                gl.draw_elements_with_i32(GL::LINES, bb_ebo_size, GL::UNSIGNED_SHORT, 0);
+            }
         }
 
         Ok(())

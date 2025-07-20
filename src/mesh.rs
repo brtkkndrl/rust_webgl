@@ -1,5 +1,5 @@
 use nalgebra::{Vector3};
-use std::str::FromStr;
+use std::{f32::{INFINITY, NEG_INFINITY}, str::FromStr};
 use web_sys::{console};
 pub struct Vertex{
     pos: Vector3<f32>,
@@ -122,6 +122,45 @@ impl Mesh{
                 }
             }
         }
+
+        Ok((verts, indices))
+    }
+
+    pub fn create_bb_primitive_buffers(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
+        let mut verts = vec![];
+        let mut indices = vec![];
+
+        let (mut min_x, mut min_y, mut min_z) =  (INFINITY, INFINITY, INFINITY);
+        let (mut max_x, mut max_y, mut max_z) =  (NEG_INFINITY, NEG_INFINITY, NEG_INFINITY);
+
+        for vert in &(self.verts){
+            min_x = min_x.min(vert.pos.x);
+            min_y = min_y.min(vert.pos.y);
+            min_z = min_z.min(vert.pos.z);
+            //
+            max_x = max_x.max(vert.pos.x);
+            max_y = max_y.max(vert.pos.y);
+            max_z = max_z.max(vert.pos.z);
+        }
+
+        //
+
+        verts.push(min_x); verts.push(min_y); verts.push(min_z);//000
+        verts.push(min_x); verts.push(min_y); verts.push(max_z);//001
+        verts.push(min_x); verts.push(max_y); verts.push(min_z);//010
+        verts.push(min_x); verts.push(max_y); verts.push(max_z);//011
+        verts.push(max_x); verts.push(min_y); verts.push(min_z);//100
+        verts.push(max_x); verts.push(min_y); verts.push(max_z);//101
+        verts.push(max_x); verts.push(max_y); verts.push(min_z);//110
+        verts.push(max_x); verts.push(max_y); verts.push(max_z);//111
+
+        //
+
+        indices.extend_from_slice(&[
+            0,1, 1,5, 5,4, 4,0,
+            2,3, 3,7, 7,6, 6,2,
+            0,2, 1,3, 5,7, 4,6
+        ]);
 
         Ok((verts, indices))
     }
