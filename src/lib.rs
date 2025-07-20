@@ -115,6 +115,14 @@ impl Renderer {
         gl.enable(GL::CULL_FACE);
         gl.cull_face(GL::BACK);
         gl.enable(WebGl2RenderingContext::DEPTH_TEST);
+        
+        let canvas_dom_width = canvas.client_width();
+        let canvas_dom_height = canvas.client_height();
+
+        canvas.set_width(canvas_dom_width as u32);
+        canvas.set_height(canvas_dom_height as u32);
+
+        gl.viewport(0, 0, canvas.width() as i32, canvas.height() as i32);
 
         let programs = ShaderPrograms::load_shaders(&gl)?;
 
