@@ -7,6 +7,8 @@ use nalgebra::{Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2};
 
 mod mesh;
 use mesh::Mesh;
+
+use crate::shaders::{FSHADER_LINE, VSHADER_LINE};
 mod shaders;
 
 #[derive(PartialEq, Eq)]
@@ -22,6 +24,7 @@ struct RenderedMesh{
     ebo: WebGlBuffer,
     ebo_size : i32,
 }
+
 
 impl RenderedMesh{
     pub fn delete_gl_buffers(&self, gl: &WebGl2RenderingContext){
@@ -67,21 +70,25 @@ impl RenderedMesh{
 
 struct ShaderPrograms{
     program_flat: WebGlProgram,
-    program_smooth: WebGlProgram
+    program_smooth: WebGlProgram,
+    program_lines: WebGlProgram
 }
 
 impl ShaderPrograms{
     pub fn load_shaders(gl: &WebGl2RenderingContext) -> Result<ShaderPrograms, String>{
-        let vshader_flat = compile_shader(&gl, GL::VERTEX_SHADER, VSHADER_FLAT,)?;
+        let vshader_flat = compile_shader(&gl, GL::VERTEX_SHADER, VSHADER_FLAT)?;
         let fshader_flat = compile_shader(&gl, GL::FRAGMENT_SHADER, FSHADER_FLAT)?;
-
-        let vshader_smooth = compile_shader(&gl, GL::VERTEX_SHADER, VSHADER_SMOOTH,)?;
-        let fshader_smooth = compile_shader(&gl, GL::FRAGMENT_SHADER, FSHADER_SMOOTH)?;
-    
         let program_flat = link_program(&gl, &vshader_flat, &fshader_flat)?;
+
+        let vshader_smooth = compile_shader(&gl, GL::VERTEX_SHADER, VSHADER_SMOOTH)?;
+        let fshader_smooth = compile_shader(&gl, GL::FRAGMENT_SHADER, FSHADER_SMOOTH)?;
         let program_smooth = link_program(&gl, &vshader_smooth, &fshader_smooth)?;
 
-        Ok(ShaderPrograms { program_flat: program_flat, program_smooth: program_smooth })
+        let vshader_lines = compile_shader(&gl, GL::VERTEX_SHADER, VSHADER_LINE)?;
+        let fshader_lines = compile_shader(&gl, GL::FRAGMENT_SHADER, FSHADER_LINE)?;
+        let program_lines = link_program(&gl, &vshader_lines, &fshader_lines)?;
+
+        Ok(ShaderPrograms { program_flat: program_flat, program_smooth: program_smooth, program_lines: program_lines })
     }
 }
 
