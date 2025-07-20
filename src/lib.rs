@@ -20,36 +20,22 @@ enum ShadingType{
 struct RenderedMesh{
     mesh: Mesh,
     shading: ShadingType,
-    vbo: WebGlBuffer,
-    ebo: WebGlBuffer,
-    ebo_size : i32,
+    gl_buffers: GLBuffers
 }
 
+struct GLBuffers{
+    vbo: WebGlBuffer,
+    ebo: WebGlBuffer,
+    ebo_size : i32
+}
 
-impl RenderedMesh{
-    pub fn delete_gl_buffers(&self, gl: &WebGl2RenderingContext){
+impl GLBuffers{
+    pub fn delete(&self, gl: &WebGl2RenderingContext){
         gl.delete_buffer(Some(&(self.vbo)));
         gl.delete_buffer(Some(&(self.ebo)));
     }
 
-    pub fn change_gl_buffers(&mut self, gl: &WebGl2RenderingContext)-> Result<(), String>{
-        self.delete_gl_buffers(gl);
-
-        let (vertices, indices) = match self.shading {
-            ShadingType::Flat => self.mesh.create_primitive_buffers_flatshaded().unwrap(),
-            ShadingType::Smooth => self.mesh.create_primitive_buffers().unwrap()
-        };
-
-        let (vbo, ebo) = RenderedMesh::create_gl_buffers(&vertices, &indices, gl).unwrap();
-
-        self.vbo = vbo;
-        self.ebo = ebo;
-        self.ebo_size = indices.len() as i32;
-
-        Ok(())
-    }
-
-    pub fn create_gl_buffers(vertices: &[f32], indices: &[u16], gl: &WebGl2RenderingContext) -> Result<(WebGlBuffer, WebGlBuffer), String>{
+    pub fn create(vertices: &[f32], indices: &[u16], gl: &WebGl2RenderingContext) -> Result<GLBuffers, String>{
         let vbo = gl.create_buffer().ok_or("Failed to create buffer")?;
         gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
         unsafe {
@@ -64,7 +50,22 @@ impl RenderedMesh{
             gl.buffer_data_with_array_buffer_view(GL::ELEMENT_ARRAY_BUFFER, &index_array, GL::STATIC_DRAW);
         }
 
-        Ok((vbo, ebo))
+        Ok(GLBuffers{vbo: vbo, ebo: ebo, ebo_size: indices.len() as i32})
+    }
+}
+
+impl RenderedMesh{
+    pub fn reload_buffers_from_mesh(&mut self, gl: &WebGl2RenderingContext)-> Result<(), String> {
+        self.gl_buffers.delete(gl);
+
+        let (vertices, indices) = match self.shading {
+            ShadingType::Flat => self.mesh.create_primitive_buffers_flatshaded().unwrap(),
+            ShadingType::Smooth => self.mesh.create_primitive_buffers().unwrap()
+        };
+
+        self.gl_buffers = GLBuffers::create(&vertices, &indices, gl).unwrap();
+
+        Ok(())
     }
 }
 
@@ -154,7 +155,7 @@ impl Renderer {
         let gl = &(self.gl);
         
         if let Some(current_mesh) = self.rendered_mesh.take(){ // delete old gl buffers
-            current_mesh.delete_gl_buffers(gl);
+            current_mesh.gl_buffers.delete(gl);
         }
 
         let mesh = Mesh::load_obj(&mesh_str).unwrap();
@@ -165,12 +166,12 @@ impl Renderer {
         // };
         let (vertices, indices) = mesh.create_primitive_buffers().unwrap();
 
-        let (vbo, ebo) = RenderedMesh::create_gl_buffers(&vertices, &indices, gl).unwrap();
+        let gl_buffers = GLBuffers::create(&vertices, &indices, gl).unwrap();
 
         // let (vbo, ebo) = Renderer::create_gl_buffers(&vertices, &indices, gl).unwrap();
 
         self.rendered_mesh = Some(
-            RenderedMesh { mesh: mesh, shading: ShadingType::Smooth, vbo: vbo, ebo: ebo, ebo_size: indices.len() as i32 }
+            RenderedMesh { mesh: mesh, shading: ShadingType::Smooth, gl_buffers: gl_buffers }
         );
 
         console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
@@ -217,7 +218,7 @@ impl Renderer {
                     return Err(format!("Unrecognized shading: {}", shading).into());
                 }
             }
-            rendered_mesh.change_gl_buffers(&self.gl)?;
+            rendered_mesh.reload_buffers_from_mesh(&self.gl)?;
         }
         Ok(())
     }
@@ -257,10 +258,10 @@ impl Renderer {
         let gl = &(self.gl);
 
         if let Some(ref rendered_mesh) = self.rendered_mesh{
-            let vbo = &rendered_mesh.vbo;
-            let ebo = &rendered_mesh.ebo;
+            let vbo = &rendered_mesh.gl_buffers.vbo;
+            let ebo = &rendered_mesh.gl_buffers.ebo;
 
-            let ebo_size = rendered_mesh.ebo_size;
+            let ebo_size = rendered_mesh.gl_buffers.ebo_size;
 
             let program = match rendered_mesh.shading{
                 ShadingType::Flat => {&self.programs.program_flat},
