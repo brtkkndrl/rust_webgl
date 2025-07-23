@@ -14,7 +14,8 @@ mod shaders;
 #[derive(PartialEq, Eq)]
 enum ShadingType{
     Smooth,
-    Flat
+    Flat,
+    Wireframe
 }
 
 struct RenderedMesh{
@@ -59,7 +60,8 @@ impl RenderedMesh{
     pub fn create(gl: &WebGl2RenderingContext, mesh: Mesh, shading: ShadingType) -> Result<RenderedMesh, String>{
         let (vertices, indices) = match shading {
             ShadingType::Flat => mesh.create_primitive_buffers_flatshaded()?,
-            ShadingType::Smooth => mesh.create_primitive_buffers()?
+            ShadingType::Smooth => mesh.create_primitive_buffers()?,
+            ShadingType::Wireframe => mesh.create_primitive_buffers_wireframe()?
         };
 
         let gl_buffers = GLBuffers::create(&vertices, &indices, &gl)?;
@@ -75,8 +77,9 @@ impl RenderedMesh{
         self.gl_buffers.delete(gl);
 
         let (vertices, indices) = match self.shading {
-            ShadingType::Flat => self.mesh.create_primitive_buffers_flatshaded().unwrap(),
-            ShadingType::Smooth => self.mesh.create_primitive_buffers().unwrap()
+            ShadingType::Flat => self.mesh.create_primitive_buffers_flatshaded()?,
+            ShadingType::Smooth => self.mesh.create_primitive_buffers()?,
+            ShadingType::Wireframe => self.mesh.create_primitive_buffers_wireframe()?
         };
 
         self.gl_buffers = GLBuffers::create(&vertices, &indices, gl).unwrap();
@@ -121,8 +124,28 @@ pub struct Renderer {
     is_bb_visible: bool,
     angle_anchor_x: f32,
     angle_anchor_y: f32,
-    zoom_level: f32,
-    rendered_mesh: Option<RenderedMesh>
+    rendered_mesh: Option<RenderedMesh>,
+    camera: Camera
+}
+
+pub struct Camera {
+    pub position: Point3<f32>,
+    pub target: Point3<f32>,
+    pub up: Vector3<f32>
+}
+
+impl Camera {
+    pub fn new(position: Point3<f32>, target: Point3<f32>, up: Vector3<f32>) -> Camera{
+        return Camera { position: position, target: target, up: up }
+    }
+
+    pub fn projection_matrix() -> Matrix4<f32>{
+        return Matrix4::new_perspective(45.0f32.to_radians(), 1.0, 0.1, 100.0);
+    }
+
+    pub fn view_matrix(&self) -> Matrix4<f32> {
+        return Matrix4::look_at_rh(&self.position, &self.target, &self.up,);
+    }
 }
 
 #[wasm_bindgen]
@@ -164,7 +187,7 @@ impl Renderer {
             is_bb_visible: false,
             angle_anchor_x: 0.0,
             angle_anchor_y: 0.0,
-            zoom_level: 10.0
+            camera : Camera { position: Point3::new(0.0, 0.0, 10.0), target: Point3::new(0.0,0.0,0.0), up: Vector3::new(0.0,1.0,0.0)}
         })
     }
 
@@ -230,6 +253,12 @@ impl Renderer {
                     }
                     rendered_mesh.shading = ShadingType::Flat;
                 },
+                "wireframe" => {
+                    if rendered_mesh.shading == ShadingType::Wireframe {
+                        return Ok(());
+                    }
+                    rendered_mesh.shading = ShadingType::Wireframe;
+                },
                 _ => {
                     return Err(format!("Unrecognized shading: {}", shading).into());
                 }
@@ -257,8 +286,9 @@ impl Renderer {
         }
         self.is_mouse_down = mouse_down;
 
-        self.zoom_level += (mouse_wheel as f32) * 0.5;
-        self.zoom_level = self.zoom_level.clamp(0.0, 50.0);
+        //TODO removal
+        //self.zoom_level += (mouse_wheel as f32) * 0.5;
+        //self.zoom_level = self.zoom_level.clamp(0.0, 50.0);
 
         // console::log_1(&format!("displaying mesh {:?}", mouse_wheel).into());
 
@@ -295,37 +325,41 @@ impl Renderer {
 
             let program = match rendered_mesh.shading{
                 ShadingType::Flat => {&self.programs.program_flat},
-                ShadingType::Smooth => {&self.programs.program_smooth}
+                ShadingType::Smooth => {&self.programs.program_smooth},
+                ShadingType::Wireframe => {&self.programs.program_lines}
             };
 
             gl.use_program(Some(program));
 
             gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
             gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
-        
-            // Enable Position Attribute
-            let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
-            gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 6 * 4, 0);
-            gl.enable_vertex_attrib_array(pos_attrib);
-        
-            // Enable Normal Attribute
-            let normal_attrib = gl.get_attrib_location(&program, "aNormal") as u32;
-            gl.vertex_attrib_pointer_with_i32(normal_attrib, 3, GL::FLOAT, false, 6 * 4, 3 * 4);
-            gl.enable_vertex_attrib_array(normal_attrib);
-        
-            let projection = Matrix4::new_perspective(45.0f32.to_radians(), 1.0, 0.1, 100.0);
 
-            let view = Matrix4::look_at_rh(
-                &Point3::new(0.0, 0.0, self.zoom_level), // Camera Position
-                &Point3::new(0.0, 0.0, 0.0), // Look At
-                &Vector3::new(0.0, 1.0, 0.0), // Up Vector
-            );
+            console::log_1(&JsValue::from_str(&format!("ebo_size: {}", ebo_size)));
+        
+            // Vertex attributes
+            if rendered_mesh.shading == ShadingType::Wireframe{ // just position attribute for wireframe
+                let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
+                gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
+                gl.enable_vertex_attrib_array(pos_attrib);
+            }else{ // position and normal for flat and smooth shading
+                let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
+                gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 6 * 4, 0);
+                gl.enable_vertex_attrib_array(pos_attrib);
+        
+                let normal_attrib = gl.get_attrib_location(&program, "aNormal") as u32;
+                gl.vertex_attrib_pointer_with_i32(normal_attrib, 3, GL::FLOAT, false, 6 * 4, 3 * 4);
+                gl.enable_vertex_attrib_array(normal_attrib);
+            }
+        
+            let projection = Camera::projection_matrix();
+            let view = self.camera.view_matrix();
             
             //TODO calculate movement size from anchor to new mouse pos distance
             //TODO calculate rotation axis (perpendicular to mouse movement, swap coords)
+            //TODO removal
 
-            let rotation_x = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), self.angle_x);
-            let rotation_y = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y);
+            //let rotation_x = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), self.angle_x);
+            //let rotation_y = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y);
             
             //let model: Matrix4<f32> = rotation_y.to_homogeneous() * rotation_x.to_homogeneous();
 
@@ -343,23 +377,30 @@ impl Renderer {
             // Pass uniforms
             self.pass_mvp_uniforms(&gl, &program, &model, &view, &projection)?;
 
-            let normal_loc = gl.get_uniform_location(program, "normalMatrix").unwrap();
-            gl.uniform_matrix3fv_with_f32_array(Some(&normal_loc), false, normal_matrix.as_slice());
-
-            let light_pos_loc = gl.get_uniform_location(&program, "lightPos").unwrap();
-            gl.uniform3f(Some(&light_pos_loc), 0.0, 0.0, 50.0);
-        
-            let light_color_loc = gl.get_uniform_location(&program, "lightColor").unwrap();
-            gl.uniform3f(Some(&light_color_loc), 1.0, 1.0, 1.0);
-        
             let object_color_loc = gl.get_uniform_location(&program, "objectColor").unwrap();
             gl.uniform3f(Some(&object_color_loc), 1.0, 1.0, 1.0);
 
+            if rendered_mesh.shading != ShadingType::Wireframe{
+                let normal_loc = gl.get_uniform_location(program, "normalMatrix").unwrap();
+                gl.uniform_matrix3fv_with_f32_array(Some(&normal_loc), false, normal_matrix.as_slice());
+
+                let light_pos_loc = gl.get_uniform_location(&program, "lightPos").unwrap();
+                gl.uniform3f(Some(&light_pos_loc), 0.0, 0.0, 50.0);
+        
+                let light_color_loc = gl.get_uniform_location(&program, "lightColor").unwrap();
+                gl.uniform3f(Some(&light_color_loc), 1.0, 1.0, 1.0);
+            }
+
             gl.clear_color(0.0, 0.0, 0.0, 1.0);
             gl.clear(web_sys::WebGl2RenderingContext::COLOR_BUFFER_BIT | web_sys::WebGl2RenderingContext::DEPTH_BUFFER_BIT);
-            gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
 
-            if(self.is_bb_visible){            //render bounding box
+            if rendered_mesh.shading == ShadingType::Wireframe{
+                gl.draw_elements_with_i32(GL::LINES, ebo_size, GL::UNSIGNED_SHORT, 0);
+            }else{
+                gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
+            }
+
+            if self.is_bb_visible{            //render bounding box
                 let bb_vbo = &rendered_mesh.bb_gl_buffers.vbo;
                 let bb_ebo = &rendered_mesh.bb_gl_buffers.ebo;
 
@@ -381,7 +422,6 @@ impl Renderer {
 
                 self.pass_mvp_uniforms(&gl, &bb_program, &model, &view, &projection)?;
 
-                gl.line_width(10.0);
                 gl.draw_elements_with_i32(GL::LINES, bb_ebo_size, GL::UNSIGNED_SHORT, 0);
             }
         }

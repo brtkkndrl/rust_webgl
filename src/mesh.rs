@@ -113,7 +113,7 @@ impl Mesh{
         }
 
         for face in &(self.faces){
-            if face.verts.len() > 3{
+            if face.verts.len() > 3{ // TODO it should not happen as there is triangulation test
                 for i in 0..face.verts.len()-1{
                     indices.push(face.verts[0]);
                     indices.push(face.verts[i]);
@@ -129,7 +129,29 @@ impl Mesh{
         Ok((verts, indices))
     }
 
+    pub fn create_primitive_buffers_wireframe(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
+        if !self.is_triangulated{
+            return Err("Mesh is not triangulated");
+        }
 
+        let mut verts = vec![];
+        
+        let mut indices = vec![];
+
+        for vert in &(self.verts){
+            verts.push(vert.pos.x);
+            verts.push(vert.pos.y);
+            verts.push(vert.pos.z);
+        }
+
+        for face in &(self.faces){
+            indices.push(face.verts[0]); indices.push(face.verts[1]);
+            indices.push(face.verts[1]); indices.push(face.verts[2]);
+            indices.push(face.verts[2]); indices.push(face.verts[0]);
+        }
+
+        Ok((verts, indices))
+    }
 
     fn compute_bounds(&self) -> (Vector3<f32>, Vector3<f32>){
         let (mut min_x, mut min_y, mut min_z) =  (INFINITY, INFINITY, INFINITY);
