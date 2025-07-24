@@ -10,6 +10,6 @@
 
 ## goals:
 
-- Change/load models, change flat/smooth shading with html UI
-- create camera abstraction, enable rotation with mouse around the object
-- shading wireframe
+- upload models
+- bunny model
+- shading wireframe fix
