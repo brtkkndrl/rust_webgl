@@ -135,6 +135,8 @@ pub struct Camera {
 }
 
 impl Camera {
+    const MOUSE_SENSITIVITY: f32 = 0.33;
+
     pub fn new(position: Point3<f32>, target: Point3<f32>, up: Vector3<f32>) -> Camera{
         return Camera { position: position, target: target, up: up, angle_x_deg: 0.0, angle_y_deg: 0.0, zoom_level: 10.0,
         from_target_direction: (position-target).normalize() }
@@ -160,8 +162,8 @@ impl Camera {
     }
 
     pub fn mouse_move(&mut self, mouse_move_vec: Vector2<f32>){
-        self.angle_x_deg += mouse_move_vec.y * 0.0069;
-		self.angle_y_deg += mouse_move_vec.x * 0.0069;
+        self.angle_x_deg += mouse_move_vec.y * Camera::MOUSE_SENSITIVITY;
+		self.angle_y_deg += mouse_move_vec.x * Camera::MOUSE_SENSITIVITY;
 
 		self.angle_x_deg = self.angle_x_deg.clamp( -90.0 + 0.1, 90.0 - 0.1); // TODO should be self.angle_y_deg
 
@@ -300,6 +302,7 @@ impl Renderer {
                 self.camera.mouse_move(Vector2::new(
                     (self.mouse_anchor.x - mouse_x) as f32, 
                     (self.mouse_anchor.y - mouse_y) as f32));
+                self.mouse_anchor = Point2::new(mouse_x, mouse_y);
             }
         }
         self.is_mouse_down = mouse_down;
