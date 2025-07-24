@@ -121,7 +121,8 @@ pub struct Renderer {
     is_mouse_down: bool,
     is_bb_visible: bool,
     rendered_mesh: Option<RenderedMesh>,
-    camera: Camera
+    camera: Camera,
+    screen_dimensions: Vector2<i32>
 }
 
 pub struct Camera {
@@ -136,14 +137,16 @@ pub struct Camera {
 
 impl Camera {
     const MOUSE_SENSITIVITY: f32 = 0.33;
+    const FOV: f32 = 45.0f32.to_radians();
 
     pub fn new(position: Point3<f32>, target: Point3<f32>, up: Vector3<f32>) -> Camera{
         return Camera { position: position, target: target, up: up, angle_x_deg: 0.0, angle_y_deg: 0.0, zoom_level: 10.0,
         from_target_direction: (position-target).normalize() }
     }
 
-    pub fn projection_matrix() -> Matrix4<f32>{
-        return Matrix4::new_perspective(45.0f32.to_radians(), 1.0, 0.1, 100.0);
+    pub fn projection_matrix(screen_dimensions: &Vector2<i32>) -> Matrix4<f32>{
+        let aspect_ratio = (screen_dimensions.x as f32) / (screen_dimensions.y as f32);
+        return Matrix4::new_perspective(aspect_ratio, Camera::FOV, 0.1, 100.0);
     }
 
     pub fn view_matrix(&self) -> Matrix4<f32> {
@@ -151,7 +154,6 @@ impl Camera {
     }
 
     fn update_position(&mut self){
-        //self.position = Point3::new(0.0,0.0, self.zoom_level);
         self.position = self.target + self.from_target_direction * self.zoom_level;
     }
 
@@ -212,7 +214,8 @@ impl Renderer {
             mouse_anchor: Point2::new(0,0),
             is_mouse_down: false,
             is_bb_visible: false,
-            camera : Camera::new(Point3::new(0.0, 0.0, 10.0), Point3::new(0.0,0.0,0.0), Vector3::new(0.0,1.0,0.0))
+            camera : Camera::new(Point3::new(0.0, 0.0, 10.0), Point3::new(0.0,0.0,0.0), Vector3::new(0.0,1.0,0.0)),
+            screen_dimensions: Vector2::new(canvas_dom_width, canvas_dom_height)
         })
     }
 
@@ -247,6 +250,8 @@ impl Renderer {
         self.canvas.set_height(canvas_dom_height as u32);
 
         self.gl.viewport(0, 0, self.canvas.width() as i32, self.canvas.height() as i32);
+
+        self.screen_dimensions = Vector2::new(canvas_dom_width, canvas_dom_height);
 
         return Ok(());
     }
@@ -370,7 +375,7 @@ impl Renderer {
                 gl.enable_vertex_attrib_array(normal_attrib);
             }
         
-            let projection = Camera::projection_matrix();
+            let projection = Camera::projection_matrix(&(self.screen_dimensions));
             let view = self.camera.view_matrix();
 
             let model = Translation3::new(0.0, 0.0, 0.0).to_homogeneous();
