@@ -159,17 +159,11 @@ impl Camera {
         self.update_position();
     }
 
-    pub fn get_forward(&self) -> Vector3<f32>{
-        return (self.target-self.position).normalize();
-    }
-
     pub fn mouse_move(&mut self, mouse_move_vec: Vector2<f32>){
         self.angle_x_deg += mouse_move_vec.y * 0.0069;
 		self.angle_y_deg += mouse_move_vec.x * 0.0069;
 
-		self.angle_x_deg = self.angle_x_deg.clamp( -90.0 + 0.1, 90.0 - 0.1);
-
-        //self.angle_x_deg = 0.0;
+		self.angle_x_deg = self.angle_x_deg.clamp( -90.0 + 0.1, 90.0 - 0.1); // TODO should be self.angle_y_deg
 
         let target_to_self_quaternion =  
         UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y_deg.to_radians())
@@ -375,15 +369,6 @@ impl Renderer {
         
             let projection = Camera::projection_matrix();
             let view = self.camera.view_matrix();
-            
-            //TODO calculate movement size from anchor to new mouse pos distance
-            //TODO calculate rotation axis (perpendicular to mouse movement, swap coords)
-            //TODO removal
-
-            //let rotation_x = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), self.angle_x);
-            //let rotation_y = UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y);
-            
-            //let model: Matrix4<f32> = rotation_y.to_homogeneous() * rotation_x.to_homogeneous();
 
             let model = Translation3::new(0.0, 0.0, 0.0).to_homogeneous();
             
