@@ -3,7 +3,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as GL, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader};
 use web_sys::{window, console, Response};
 use wasm_bindgen_futures::JsFuture;
-use nalgebra::{Matrix3, Matrix4, Point3, UnitQuaternion, Vector3, Vector2, Translation3};
+use nalgebra::{Matrix3, Matrix4, Point2, Point3, Translation3, UnitQuaternion, Vector2, Vector3};
 
 mod mesh;
 use mesh::Mesh;
@@ -117,13 +117,9 @@ pub struct Renderer {
     gl: GL,
     canvas : HtmlCanvasElement,
     programs: ShaderPrograms,
-    angle_x: f32,
-    angle_y: f32,
-    mouse_anchor: (i32, i32),
+    mouse_anchor: Point2<i32>,
     is_mouse_down: bool,
     is_bb_visible: bool,
-    angle_anchor_x: f32,
-    angle_anchor_y: f32,
     rendered_mesh: Option<RenderedMesh>,
     camera: Camera
 }
@@ -131,12 +127,17 @@ pub struct Renderer {
 pub struct Camera {
     pub position: Point3<f32>,
     pub target: Point3<f32>,
-    pub up: Vector3<f32>
+    pub up: Vector3<f32>,
+    angle_x_deg: f32,
+    angle_y_deg: f32,
+    zoom_level: f32,
+    from_target_direction: Vector3<f32>
 }
 
 impl Camera {
     pub fn new(position: Point3<f32>, target: Point3<f32>, up: Vector3<f32>) -> Camera{
-        return Camera { position: position, target: target, up: up }
+        return Camera { position: position, target: target, up: up, angle_x_deg: 0.0, angle_y_deg: 0.0, zoom_level: 10.0,
+        from_target_direction: (position-target).normalize() }
     }
 
     pub fn projection_matrix() -> Matrix4<f32>{
@@ -145,6 +146,38 @@ impl Camera {
 
     pub fn view_matrix(&self) -> Matrix4<f32> {
         return Matrix4::look_at_rh(&self.position, &self.target, &self.up,);
+    }
+
+    fn update_position(&mut self){
+        //self.position = Point3::new(0.0,0.0, self.zoom_level);
+        self.position = self.target + self.from_target_direction * self.zoom_level;
+    }
+
+    pub fn mouse_scroll(&mut self, mouse_wheel : f32) {
+        self.zoom_level += mouse_wheel * 0.5;
+        self.zoom_level = self.zoom_level.clamp(0.0, 50.0);
+        self.update_position();
+    }
+
+    pub fn get_forward(&self) -> Vector3<f32>{
+        return (self.target-self.position).normalize();
+    }
+
+    pub fn mouse_move(&mut self, mouse_move_vec: Vector2<f32>){
+        self.angle_x_deg += mouse_move_vec.y * 0.0069;
+		self.angle_y_deg += mouse_move_vec.x * 0.0069;
+
+		self.angle_x_deg = self.angle_x_deg.clamp( -90.0 + 0.1, 90.0 - 0.1);
+
+        //self.angle_x_deg = 0.0;
+
+        let target_to_self_quaternion =  
+        UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y_deg.to_radians())
+        * UnitQuaternion::from_axis_angle(&Vector3::x_axis(), self.angle_x_deg.to_radians());
+
+        self.from_target_direction = target_to_self_quaternion * Vector3::z_axis().into_inner();
+
+        self.update_position();
     }
 }
 
@@ -180,14 +213,10 @@ impl Renderer {
             canvas,
             programs: programs,
             rendered_mesh: None,
-            angle_x: 0.0,
-            angle_y: 0.0,
-            mouse_anchor: (0,0),
+            mouse_anchor: Point2::new(0,0),
             is_mouse_down: false,
             is_bb_visible: false,
-            angle_anchor_x: 0.0,
-            angle_anchor_y: 0.0,
-            camera : Camera { position: Point3::new(0.0, 0.0, 10.0), target: Point3::new(0.0,0.0,0.0), up: Vector3::new(0.0,1.0,0.0)}
+            camera : Camera::new(Point3::new(0.0, 0.0, 10.0), Point3::new(0.0,0.0,0.0), Vector3::new(0.0,1.0,0.0))
         })
     }
 
@@ -272,23 +301,16 @@ impl Renderer {
     pub fn update(&mut self, mouse_down: bool, mouse_x: i32, mouse_y: i32, mouse_wheel: i32) ->Result<(), JsValue>{
         if mouse_down{
             if !self.is_mouse_down{ // set anchor
-                self.mouse_anchor = (mouse_x, mouse_y);
-                self.angle_anchor_y = self.angle_y;
-                //self.angle_anchor_x = self.angle_x;
+                self.mouse_anchor = Point2::new(mouse_x, mouse_y);
             } else { // move
-                let mouse_vec = Vector2::new(
-                    (self.mouse_anchor.0 - mouse_x) as f32, 
-                    (self.mouse_anchor.1 - mouse_y) as f32);
-
-                //self.angle_x = self.angle_anchor_x + (-mouse_vec.y as f32) * 0.0069;
-                self.angle_y = self.angle_anchor_y + (-mouse_vec.x as f32) * 0.0069;
+                self.camera.mouse_move(Vector2::new(
+                    (self.mouse_anchor.x - mouse_x) as f32, 
+                    (self.mouse_anchor.y - mouse_y) as f32));
             }
         }
         self.is_mouse_down = mouse_down;
 
-        //TODO removal
-        //self.zoom_level += (mouse_wheel as f32) * 0.5;
-        //self.zoom_level = self.zoom_level.clamp(0.0, 50.0);
+        self.camera.mouse_scroll(mouse_wheel as f32);
 
         // console::log_1(&format!("displaying mesh {:?}", mouse_wheel).into());
 
@@ -385,7 +407,7 @@ impl Renderer {
                 gl.uniform_matrix3fv_with_f32_array(Some(&normal_loc), false, normal_matrix.as_slice());
 
                 let light_pos_loc = gl.get_uniform_location(&program, "lightPos").unwrap();
-                gl.uniform3f(Some(&light_pos_loc), 0.0, 0.0, 50.0);
+                gl.uniform3f(Some(&light_pos_loc), self.camera.position.x, self.camera.position.y, self.camera.position.z);
         
                 let light_color_loc = gl.get_uniform_location(&program, "lightColor").unwrap();
                 gl.uniform3f(Some(&light_color_loc), 1.0, 1.0, 1.0);
