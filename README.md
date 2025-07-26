@@ -10,5 +10,5 @@
 
 ## goals:
 
-- upload models
-- bunny model
+- uploading models
+- fixe loading obj models with normals indexes in face declarations
