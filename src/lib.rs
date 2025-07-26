@@ -122,7 +122,8 @@ pub struct Renderer {
     is_bb_visible: bool,
     rendered_mesh: Option<RenderedMesh>,
     camera: Camera,
-    screen_dimensions: Vector2<i32>
+    screen_dimensions: Vector2<i32>,
+    last_normal_attrib_pos: i32
 }
 
 pub struct Camera {
@@ -215,7 +216,8 @@ impl Renderer {
             is_mouse_down: false,
             is_bb_visible: false,
             camera : Camera::new(Point3::new(0.0, 0.0, 10.0), Point3::new(0.0,0.0,0.0), Vector3::new(0.0,1.0,0.0)),
-            screen_dimensions: Vector2::new(canvas_dom_width, canvas_dom_height)
+            screen_dimensions: Vector2::new(canvas_dom_width, canvas_dom_height),
+            last_normal_attrib_pos: -1
         })
     }
 
@@ -334,7 +336,7 @@ impl Renderer {
     }
 
     #[wasm_bindgen]
-    pub fn render(&self) -> Result<(), JsValue> {
+    pub fn render(&mut self) -> Result<(), JsValue> {
         if self.rendered_mesh.is_none() {
             return Err(format!("No mesh loaded!").into());
         }
@@ -358,44 +360,48 @@ impl Renderer {
             gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
             gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
 
-            console::log_1(&JsValue::from_str(&format!("ebo_size: {}", ebo_size)));
+            //console::log_1(&JsValue::from_str(&format!("ebo_size: {}", ebo_size)));
         
             // Vertex attributes
-            if rendered_mesh.shading == ShadingType::Wireframe{ // just position attribute for wireframe
+            if rendered_mesh.shading == ShadingType::Wireframe{ // just position attribute for wireframe                
                 let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
                 gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
                 gl.enable_vertex_attrib_array(pos_attrib);
+
+                if self.last_normal_attrib_pos >= 0{
+                    gl.disable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
+                    self.last_normal_attrib_pos = -1;
+                }
             }else{ // position and normal for flat and smooth shading
                 let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
                 gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 6 * 4, 0);
                 gl.enable_vertex_attrib_array(pos_attrib);
         
-                let normal_attrib = gl.get_attrib_location(&program, "aNormal") as u32;
-                gl.vertex_attrib_pointer_with_i32(normal_attrib, 3, GL::FLOAT, false, 6 * 4, 3 * 4);
-                gl.enable_vertex_attrib_array(normal_attrib);
+                self.last_normal_attrib_pos = gl.get_attrib_location(&program, "aNormal");
+                gl.vertex_attrib_pointer_with_i32(self.last_normal_attrib_pos as u32, 3, GL::FLOAT, false, 6 * 4, 3 * 4);
+                gl.enable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
             }
         
             let projection = Camera::projection_matrix(&(self.screen_dimensions));
             let view = self.camera.view_matrix();
-
             let model = Translation3::new(0.0, 0.0, 0.0).to_homogeneous();
-            
-            // Extract the 3x3 normal matrix
-            let normal_matrix = Matrix3::new(
-                model[(0, 0)], model[(0, 1)], model[(0, 2)], // First row
-                model[(1, 0)], model[(1, 1)], model[(1, 2)], // Second row
-                model[(2, 0)], model[(2, 1)], model[(2, 2)], // Third row
-            );
-            
-            let normal_matrix = normal_matrix.try_inverse().unwrap().transpose();
-
-            // Pass uniforms
-            self.pass_mvp_uniforms(&gl, &program, &model, &view, &projection)?;
 
             let object_color_loc = gl.get_uniform_location(&program, "objectColor").unwrap();
             gl.uniform3f(Some(&object_color_loc), 1.0, 1.0, 1.0);
 
+            // Pass uniforms
+            self.pass_mvp_uniforms(&gl, &program, &model, &view, &projection)?;
+
             if rendered_mesh.shading != ShadingType::Wireframe{
+                // Extract the 3x3 normal matrix
+                let normal_matrix = Matrix3::new(
+                    model[(0, 0)], model[(0, 1)], model[(0, 2)], // First row
+                    model[(1, 0)], model[(1, 1)], model[(1, 2)], // Second row
+                    model[(2, 0)], model[(2, 1)], model[(2, 2)], // Third row
+                );
+            
+                let normal_matrix = normal_matrix.try_inverse().unwrap().transpose();
+
                 let normal_loc = gl.get_uniform_location(program, "normalMatrix").unwrap();
                 gl.uniform_matrix3fv_with_f32_array(Some(&normal_loc), false, normal_matrix.as_slice());
 

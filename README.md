@@ -12,4 +12,3 @@
 
 - upload models
 - bunny model
-- shading wireframe fix
