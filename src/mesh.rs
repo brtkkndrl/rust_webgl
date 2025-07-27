@@ -19,22 +19,7 @@ pub struct Mesh{
 }
 
 impl Mesh{
-    pub fn basic_triangle() -> Result<Mesh, String>{
-        
-        let verts = vec![
-            Vertex{pos: Vector3::new(-0.5, -0.5, 0.0), normal: Vector3::new(0.0, 0.0, 1.0)},
-            Vertex{pos: Vector3::new(0.5, -0.5, 0.0), normal: Vector3::new(0.0, 0.0, 1.0)},
-            Vertex{pos: Vector3::new(0.0,  0.5, 0.0), normal: Vector3::new(0.0, 0.0, 1.0)}
-        ];
-    
-        let faces = vec![
-            Face { verts: vec![0, 1, 2] }
-        ];
-    
-        Ok(Mesh{verts: verts, faces: faces, is_triangulated: true, bb_min: Vector3::new(0.0,0.0,0.0), bb_max: Vector3::new(0.0,0.0,0.0)})
-    }
-
-    pub fn load_obj(obj_str: &String) -> Result<Mesh, &str>{
+    pub fn load_obj(obj_str: &String) -> Result<Mesh, String>{
         let mut verts : Vec<Vertex> = vec![];
         let mut faces : Vec<Face> = vec![];
 
@@ -56,9 +41,9 @@ impl Mesh{
 
                     verts.push(Vertex{
                         pos: Vector3::new(
-                            f32::from_str(words[1].trim()).unwrap(),
-                            f32::from_str(words[2].trim()).unwrap(),
-                            f32::from_str(words[3].trim()).unwrap()
+                            f32::from_str(words[1].trim()).map_err(|e| e.to_string())?,
+                            f32::from_str(words[2].trim()).map_err(|e| e.to_string())?,
+                            f32::from_str(words[3].trim()).map_err(|e| e.to_string())?
                         ),
                         normal: Vector3::new(0.0,0.0,0.0)})
                 },
@@ -79,7 +64,7 @@ impl Mesh{
                 "" => {},
                 _ => {
                     console::log_1(&("Can't load obj").into());
-                    return Err("Can't load obj")
+                    return Err("Can't load obj".to_string())
                 }
             }
         }

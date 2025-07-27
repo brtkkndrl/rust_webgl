@@ -233,7 +233,7 @@ impl Renderer {
             shading = current_mesh.shading;
         }
 
-        let mesh = Mesh::load_obj(&mesh_str).unwrap();
+        let mesh = Mesh::load_obj(&mesh_str)?;
 
         self.rendered_mesh = Some(RenderedMesh::create(gl, mesh, shading)?);
 
