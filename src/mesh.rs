@@ -1,6 +1,8 @@
-use nalgebra::{Vector3};
+use nalgebra::{Point3, Vector3};
 use std::{f32::{INFINITY, NEG_INFINITY}, str::FromStr};
 use web_sys::{console};
+use std::collections::HashMap;
+
 pub struct Vertex{
     pos: Vector3<f32>,
     normal: Vector3<f32>
@@ -18,12 +20,28 @@ pub struct Mesh{
     bb_max: Vector3<f32>
 }
 
+#[derive(PartialEq, Eq)]
+enum ParsingState{
+    ParsingVerts,
+    ParsingNormals,
+    ParsingFacesSimple,
+    ParsingFacesComplex
+}
+
 impl Mesh{
     pub fn load_obj(obj_str: &String) -> Result<Mesh, String>{
+        let mut obj_vertices: Vec<Vector3<f32>> = vec![];
+        let mut obj_normals: Vec<Vector3<f32>> = vec![];
+        let mut obj_faces: Vec<Vec<(i32, i32, i32)>> = vec![];
+
         let mut verts : Vec<Vertex> = vec![];
         let mut faces : Vec<Face> = vec![];
 
         let mut is_triangulated = true;
+        let mut found_simple_face_def = false;
+        let mut found_complex_face_def = false;
+
+        // let mut parsing_state: ParsingState = ParsingState::ParsingVerts;
 
         for line in obj_str.lines() {
             if line.trim() == "" || line.trim().starts_with("#"){
@@ -32,49 +50,141 @@ impl Mesh{
 
             let words: Vec<&str> = line.split(' ').collect();
 
-            match words[0].trim() {
+            let first_word = words[0].trim();
+
+        //     match parsing_state{
+        //         ParsingState::ParsingVerts => {
+        //             if first_word == "vn"{parsing_state = ParsingState::ParsingNormals};
+
+        //             if first_word != "v"{return Err(format!("Expected vertex definition, found: {first_word}").to_string());}
+
+        //             obj_vertices.push(Vector3::new(
+        //                     f32::from_str(words[1].trim()).map_err(|e| e.to_string())?,
+        //                     f32::from_str(words[2].trim()).map_err(|e| e.to_string())?,
+        //                     f32::from_str(words[3].trim()).map_err(|e| e.to_string())?
+        //             ));
+        //         },
+        //         ParsingState::ParsingNormals => {
+        //             if first_word != "vn"{return Err(format!("Expected normal definition, found: {first_word}").to_string());}
+        //         },
+        //         ParsingState::ParsingFacesSimple => {
+        //             if first_word != "f"{return Err(format!("Expected simple face definition, found: {first_word}").to_string());}
+        //         },
+        //         ParsingState::ParsingFacesComplex => {
+        //             if first_word != "f"{return Err(format!("Expected complex face definition, found: {first_word}").to_string());}
+        //         },
+        //     }
+
+            match first_word {
                 "v" => 
                 {
-                    // console::log_1(&format!("vec {:?} {:?} {:?}", f32::from_str(words[1].trim()).unwrap(),
-                    // f32::from_str(words[2].trim()).unwrap(),
-                    // f32::from_str(words[3].trim()).unwrap()).into());
-
-                    verts.push(Vertex{
-                        pos: Vector3::new(
+                    obj_vertices.push(Vector3::new(
                             f32::from_str(words[1].trim()).map_err(|e| e.to_string())?,
                             f32::from_str(words[2].trim()).map_err(|e| e.to_string())?,
                             f32::from_str(words[3].trim()).map_err(|e| e.to_string())?
-                        ),
-                        normal: Vector3::new(0.0,0.0,0.0)})
+                    ));
                 },
+                "vn" =>{
+                    obj_normals.push(Vector3::new(
+                            f32::from_str(words[1].trim()).map_err(|e| e.to_string())?,
+                            f32::from_str(words[2].trim()).map_err(|e| e.to_string())?,
+                            f32::from_str(words[3].trim()).map_err(|e| e.to_string())?
+                    ));
+                }
                 "f" => 
                 {
+                    let mut obj_face: Vec<(i32, i32, i32)> = vec![];
+                    if line.contains("/"){// vert/texture/normal
+                        if found_simple_face_def{return Err("Invalid face definition, expected simple".to_string())}
+
+                        found_complex_face_def = true;
+
+                        for word in &words[1..] {
+                            let parts: Vec<&str> = word.trim().split('/').collect();
+
+                            if parts.len() != 3{return Err("Invalid face definition".to_string())}
+
+                            let vert_index = i32::from_str(&parts[0]).unwrap()-1;
+                            let normal_index = i32::from_str(&parts[2]).unwrap()-1;
+
+                            obj_face.push((vert_index, -1, normal_index));
+                        }
+                    }else{//simple definition
+                        if found_complex_face_def{return Err("Invalid face definition, expected complex".to_string())}
+
+                        found_simple_face_def = true;
+
+                        for word in &words[1..] {
+                            let vert_index = i32::from_str(&word.trim()).unwrap()-1;
+                            obj_face.push((vert_index, -1, -1));
+                        }
+                    }
+                    obj_faces.push(obj_face);
+
+
+                    // let mut temp_verts : Vec<u16> = vec![];
+                    // for word in &words[1..] {
+                    //     temp_verts.push(u16::from_str(&word.trim()).unwrap()-1);
+                    // }
+                    // faces.push(Face{verts: temp_verts.clone()});
+
+                    // if temp_verts.len() > 3 {
+                    //     is_triangulated = false;
+                    // }
+
                     //console::log_1(&format!("face").into());
-                    let mut temp_verts : Vec<u16> = vec![];
-
-                    for word in &words[1..] {
-                        temp_verts.push(u16::from_str(&word.trim()).unwrap()-1);
-                    }
-                    faces.push(Face{verts: temp_verts.clone()});
-
-                    if temp_verts.len() > 3 {
-                        is_triangulated = false;
-                    }
                 },
                 "" => {},
                 _ => {
-                    console::log_1(&("Can't load obj").into());
-                    return Err("Can't load obj".to_string())
+                    // console::log_1(&("Can't load obj").into());
+                    return Err(format!("Unexpected character: {first_word}").to_string())
                 }
             }
         }
+
+        assert!(!(found_simple_face_def && found_complex_face_def));
+
+        // Transform obj_verts, obj_normals, and obj_faces into Vertex, and Face vectors
+
+        if found_simple_face_def{
+            for obj_vert in obj_vertices{
+                verts.push(Vertex { pos: obj_vert, normal: Vector3::new(0.0,0.0,0.0) });
+            }
+            for obj_face in obj_faces{
+                let mut temp_vert_ids : Vec<u16> = vec![];
+                for vert_uv_normal_def in obj_face{
+                    temp_vert_ids.push(vert_uv_normal_def.0 as u16);
+                }
+                if temp_vert_ids.len() > 3{is_triangulated = false;}
+                faces.push(Face{verts: temp_vert_ids.clone()});
+            }
+        }else if found_complex_face_def{
+            let mut indexes_to_vert_ids: HashMap<(i32, i32, i32), u16> = HashMap::new();
+
+            for obj_face in obj_faces{
+                let mut temp_vert_ids : Vec<u16> = vec![];
+
+                for vert_uv_normal_def in obj_face{
+                    if let Some(vert_id) = indexes_to_vert_ids.get(&vert_uv_normal_def){//already exists
+                        temp_vert_ids.push(vert_id.clone());
+                    }else{
+                        verts.push(Vertex { pos: obj_vertices[vert_uv_normal_def.0 as usize],
+                             normal: obj_normals[vert_uv_normal_def.2 as usize] });
+                        indexes_to_vert_ids.insert(vert_uv_normal_def, (verts.len()-1).try_into().unwrap());
+                    }
+                }
+
+                if temp_vert_ids.len() > 3{is_triangulated = false;}
+                faces.push(Face{verts: temp_vert_ids.clone()});
+            }
+        }
         
-        console::log_1(&format!("loaded {:?}v {:?}f", verts.len(), faces.len()).into());
         let mut mesh = Mesh{verts: verts, faces: faces, is_triangulated: is_triangulated, bb_min: Vector3::new(0.0,0.0,0.0), bb_max: Vector3::new(0.0,0.0,0.0)};
-        mesh.derrive_normals_from_faces().unwrap();
-        mesh.triangulate_faces().unwrap();
+        mesh.derrive_normals_from_faces()?;
+        mesh.triangulate_faces()?;
         mesh.move_pivot_to_center();
-        //mesh.compute_flatshaded().unwrap();
+        
+        console::log_1(&format!("loaded {:?}v {:?}f", mesh.verts.len(), mesh.faces.len()).into());
         Ok(mesh)
     }
 
@@ -198,6 +308,10 @@ impl Mesh{
     }
 
     pub fn triangulate_faces(&mut self) ->Result<(), &str>{
+        if self.is_triangulated{
+            return Ok(());
+        }
+
         let mut new_faces: Vec<Face> = vec![];
         
         for face in &(self.faces){
