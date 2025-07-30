@@ -38,6 +38,7 @@ impl Mesh{
         let mut faces : Vec<Face> = vec![];
 
         let mut is_triangulated = true;
+        let mut has_normals_defined = false;
         let mut found_simple_face_def = false;
         let mut found_complex_face_def = false;
 
@@ -159,6 +160,8 @@ impl Mesh{
                 faces.push(Face{verts: temp_vert_ids.clone()});
             }
         }else if found_complex_face_def{
+            has_normals_defined = true;
+
             let mut indexes_to_vert_ids: HashMap<(i32, i32, i32), u16> = HashMap::new();
 
             for obj_face in obj_faces{
@@ -179,8 +182,11 @@ impl Mesh{
             }
         }
         
-        let mut mesh = Mesh{verts: verts, faces: faces, is_triangulated: is_triangulated, bb_min: Vector3::new(0.0,0.0,0.0), bb_max: Vector3::new(0.0,0.0,0.0)};
-        mesh.derrive_normals_from_faces()?;
+        let mut mesh = Mesh{verts: verts, faces: faces, is_triangulated: is_triangulated,
+            bb_min: Vector3::new(0.0,0.0,0.0), bb_max: Vector3::new(0.0,0.0,0.0)};
+        if found_simple_face_def{
+            mesh.derrive_normals_from_faces()?;
+        }
         mesh.triangulate_faces()?;
         mesh.move_pivot_to_center();
         

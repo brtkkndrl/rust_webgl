@@ -69,7 +69,7 @@ impl RenderedMesh{
         let (bb_vertices, bb_indices) = mesh.create_bb_primitive_buffers()?;
     
         let bb_gl_buffers = GLBuffers::create(&bb_vertices, &bb_indices, &gl)?;
-        
+
         return Ok(RenderedMesh { mesh: mesh, shading: shading, gl_buffers: gl_buffers, bb_gl_buffers: bb_gl_buffers });
     }
 
