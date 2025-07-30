@@ -346,7 +346,6 @@ impl Renderer {
         if let Some(ref rendered_mesh) = self.rendered_mesh{
             let vbo = &rendered_mesh.gl_buffers.vbo;
             let ebo = &rendered_mesh.gl_buffers.ebo;
-
             let ebo_size = rendered_mesh.gl_buffers.ebo_size;
 
             let program = match rendered_mesh.shading{

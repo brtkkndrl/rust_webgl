@@ -173,7 +173,9 @@ impl Mesh{
                     }else{
                         verts.push(Vertex { pos: obj_vertices[vert_uv_normal_def.0 as usize],
                              normal: obj_normals[vert_uv_normal_def.2 as usize] });
-                        indexes_to_vert_ids.insert(vert_uv_normal_def, (verts.len()-1).try_into().unwrap());
+                        let new_vert_index =  u16::try_from(verts.len() - 1).expect("Exceeded vert limit");
+                        indexes_to_vert_ids.insert(vert_uv_normal_def, new_vert_index);
+                        temp_vert_ids.push(new_vert_index);
                     }
                 }
 
@@ -191,6 +193,8 @@ impl Mesh{
         mesh.move_pivot_to_center();
         
         console::log_1(&format!("loaded {:?}v {:?}f", mesh.verts.len(), mesh.faces.len()).into());
+        console::log_1(&format!("was triangulated: {is_triangulated}").into());
+        console::log_1(&format!("had normals: {found_complex_face_def}").into());
         Ok(mesh)
     }
 
@@ -408,6 +412,8 @@ impl Mesh{
             indices.push(final_tri.1);
             indices.push(final_tri.2);
         }
+
+        console::log_1(&format!("flatshaded: {}v", verts.len()).into());
 
         Ok((verts, indices))
     }
