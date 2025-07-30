@@ -413,8 +413,6 @@ impl Mesh{
             indices.push(final_tri.2);
         }
 
-        console::log_1(&format!("flatshaded: {}v", verts.len()).into());
-
         Ok((verts, indices))
     }
 

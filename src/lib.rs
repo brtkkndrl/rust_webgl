@@ -344,10 +344,6 @@ impl Renderer {
         let gl = &(self.gl);
 
         if let Some(ref rendered_mesh) = self.rendered_mesh{
-            let vbo = &rendered_mesh.gl_buffers.vbo;
-            let ebo = &rendered_mesh.gl_buffers.ebo;
-            let ebo_size = rendered_mesh.gl_buffers.ebo_size;
-
             let program = match rendered_mesh.shading{
                 ShadingType::Flat => {&self.programs.program_flat},
                 ShadingType::Smooth => {&self.programs.program_smooth},
@@ -355,9 +351,6 @@ impl Renderer {
             };
 
             gl.use_program(Some(program));
-
-            gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
-            gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
 
             //console::log_1(&JsValue::from_str(&format!("ebo_size: {}", ebo_size)));
         
@@ -413,6 +406,14 @@ impl Renderer {
 
             gl.clear_color(0.0, 0.0, 0.0, 1.0);
             gl.clear(web_sys::WebGl2RenderingContext::COLOR_BUFFER_BIT | web_sys::WebGl2RenderingContext::DEPTH_BUFFER_BIT);
+
+
+            let vbo = &rendered_mesh.gl_buffers.vbo;
+            let ebo = &rendered_mesh.gl_buffers.ebo;
+            let ebo_size = rendered_mesh.gl_buffers.ebo_size;
+
+            gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
+            gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
 
             if rendered_mesh.shading == ShadingType::Wireframe{
                 gl.draw_elements_with_i32(GL::LINES, ebo_size, GL::UNSIGNED_SHORT, 0);
