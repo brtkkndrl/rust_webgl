@@ -21,7 +21,7 @@ enum ShadingType{
 struct RenderedMesh{
     mesh: Mesh,
     shading: ShadingType,
-    gl_buffers: GLBuffers,
+    mesh_gl_buffers: Vec<GLBuffers>,
     bb_gl_buffers: GLBuffers // bounding box gl buffers
 }
 
@@ -35,6 +35,25 @@ impl GLBuffers{
     pub fn delete(&self, gl: &WebGl2RenderingContext){
         gl.delete_buffer(Some(&(self.vbo)));
         gl.delete_buffer(Some(&(self.ebo)));
+    }
+
+    pub fn split_into_chunks(vertices: &[f32], indices: &[usize]) -> Result<Vec<(Vec<f32>, Vec<u16>)>, String>{
+        //TODO split into chunks here
+        if vertices.len() <= u16::MAX as usize{ // no need for split, inside a limit
+            let indices_u16: Vec<u16> = indices.iter().map(|&i| i as u16).collect();
+            return Ok(vec![(vertices.to_vec(), indices_u16)]);
+        }else{
+            return Err("Chunk splitting not implemented!".into())
+
+                        // foreach face
+            //      chunk_ids = map.register(face.verts) 
+            //      chunk_verts.add(verts)
+            //      chunk_faces.add(chunk_ids)
+            //      if map.total_unique > MAX-3 or chunk_size = total_size/ (total_size/MAX_CHUNK_SIZE).ceil() -3:
+            //          break
+            //  
+
+        }
     }
 
     pub fn create(vertices: &[f32], indices: &[u16], gl: &WebGl2RenderingContext) -> Result<GLBuffers, String>{
@@ -64,17 +83,30 @@ impl RenderedMesh{
             ShadingType::Wireframe => mesh.create_primitive_buffers_wireframe()?
         };
 
-        let gl_buffers = GLBuffers::create(&vertices, &indices, &gl)?;
+        let mut mesh_gl_buffers : Vec<GLBuffers> = vec![];
+
+        for chunk in GLBuffers::split_into_chunks(&vertices, &indices)?{
+            let chunk_buffers = GLBuffers::create(&chunk.0, &chunk.1, gl)?;
+            mesh_gl_buffers.push(chunk_buffers);
+        }
 
         let (bb_vertices, bb_indices) = mesh.create_bb_primitive_buffers()?;
     
         let bb_gl_buffers = GLBuffers::create(&bb_vertices, &bb_indices, &gl)?;
 
-        return Ok(RenderedMesh { mesh: mesh, shading: shading, gl_buffers: gl_buffers, bb_gl_buffers: bb_gl_buffers });
+        return Ok(RenderedMesh { mesh: mesh, shading: shading, mesh_gl_buffers: mesh_gl_buffers, bb_gl_buffers: bb_gl_buffers });
+    }
+
+    pub fn delete_mesh_gl_buffers(&mut self, gl: &WebGl2RenderingContext){
+        for chunk in &self.mesh_gl_buffers{
+            chunk.delete(gl);
+        }
+
+        self.mesh_gl_buffers.clear();
     }
 
     pub fn reload_gl_buffers(&mut self, gl: &WebGl2RenderingContext)-> Result<(), String> {
-        self.gl_buffers.delete(gl);
+        self.delete_mesh_gl_buffers(gl);
 
         let (vertices, indices) = match self.shading {
             ShadingType::Flat => self.mesh.create_primitive_buffers_flatshaded()?,
@@ -82,7 +114,14 @@ impl RenderedMesh{
             ShadingType::Wireframe => self.mesh.create_primitive_buffers_wireframe()?
         };
 
-        self.gl_buffers = GLBuffers::create(&vertices, &indices, gl).unwrap();
+        let mut mesh_gl_buffers : Vec<GLBuffers> = vec![];
+
+        for chunk in GLBuffers::split_into_chunks(&vertices, &indices)?{
+            let chunk_buffers = GLBuffers::create(&chunk.0, &chunk.1, gl)?;
+            mesh_gl_buffers.push(chunk_buffers);
+        }
+
+        self.mesh_gl_buffers = mesh_gl_buffers;
 
         Ok(())
     }
@@ -227,8 +266,8 @@ impl Renderer {
         
         let mut shading = ShadingType::Flat;
 
-        if let Some(current_mesh) = self.rendered_mesh.take(){ // delete old gl buffers
-            current_mesh.gl_buffers.delete(gl);
+        if let Some(mut current_mesh) = self.rendered_mesh.take(){ // delete old gl buffers
+            current_mesh.delete_mesh_gl_buffers(gl);
             current_mesh.bb_gl_buffers.delete(gl);
             shading = current_mesh.shading;
         }
@@ -407,18 +446,19 @@ impl Renderer {
             gl.clear_color(0.0, 0.0, 0.0, 1.0);
             gl.clear(web_sys::WebGl2RenderingContext::COLOR_BUFFER_BIT | web_sys::WebGl2RenderingContext::DEPTH_BUFFER_BIT);
 
+            for chunk in &rendered_mesh.mesh_gl_buffers{
+                let vbo = &chunk.vbo;
+                let ebo = &chunk.ebo;
+                let ebo_size = chunk.ebo_size;
 
-            let vbo = &rendered_mesh.gl_buffers.vbo;
-            let ebo = &rendered_mesh.gl_buffers.ebo;
-            let ebo_size = rendered_mesh.gl_buffers.ebo_size;
+                gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
+                gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
 
-            gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
-            gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
-
-            if rendered_mesh.shading == ShadingType::Wireframe{
-                gl.draw_elements_with_i32(GL::LINES, ebo_size, GL::UNSIGNED_SHORT, 0);
-            }else{
-                gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
+                if rendered_mesh.shading == ShadingType::Wireframe{
+                    gl.draw_elements_with_i32(GL::LINES, ebo_size, GL::UNSIGNED_SHORT, 0);
+                }else{
+                    gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
+                }
             }
 
             if self.is_bb_visible{            //render bounding box

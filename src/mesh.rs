@@ -10,7 +10,7 @@ pub struct Vertex{
 
 #[derive(Clone)]
 pub struct Face{
-    verts: Vec<u16>
+    verts: Vec<usize>
 }
 pub struct Mesh{
     verts: Vec<Vertex>,
@@ -21,7 +21,7 @@ pub struct Mesh{
 }
 
 #[derive(PartialEq, Eq)]
-enum ParsingState{
+enum ParsingState{//TODO use or get rid of
     ParsingVerts,
     ParsingNormals,
     ParsingFacesSimple,
@@ -152,9 +152,9 @@ impl Mesh{
                 verts.push(Vertex { pos: obj_vert, normal: Vector3::new(0.0,0.0,0.0) });
             }
             for obj_face in obj_faces{
-                let mut temp_vert_ids : Vec<u16> = vec![];
+                let mut temp_vert_ids : Vec<usize> = vec![];
                 for vert_uv_normal_def in obj_face{
-                    temp_vert_ids.push(vert_uv_normal_def.0 as u16);
+                    temp_vert_ids.push(vert_uv_normal_def.0 as usize);
                 }
                 if temp_vert_ids.len() > 3{is_triangulated = false;}
                 faces.push(Face{verts: temp_vert_ids.clone()});
@@ -162,10 +162,10 @@ impl Mesh{
         }else if found_complex_face_def{
             has_normals_defined = true;
 
-            let mut indexes_to_vert_ids: HashMap<(i32, i32, i32), u16> = HashMap::new();
+            let mut indexes_to_vert_ids: HashMap<(i32, i32, i32), usize> = HashMap::new();
 
             for obj_face in obj_faces{
-                let mut temp_vert_ids : Vec<u16> = vec![];
+                let mut temp_vert_ids : Vec<usize> = vec![];
 
                 for vert_uv_normal_def in obj_face{
                     if let Some(vert_id) = indexes_to_vert_ids.get(&vert_uv_normal_def){//already exists
@@ -173,7 +173,7 @@ impl Mesh{
                     }else{
                         verts.push(Vertex { pos: obj_vertices[vert_uv_normal_def.0 as usize],
                              normal: obj_normals[vert_uv_normal_def.2 as usize] });
-                        let new_vert_index =  u16::try_from(verts.len() - 1).expect("Exceeded vert limit");
+                        let new_vert_index =  usize::try_from(verts.len() - 1).expect("Exceeded vert limit");
                         indexes_to_vert_ids.insert(vert_uv_normal_def, new_vert_index);
                         temp_vert_ids.push(new_vert_index);
                     }
@@ -198,7 +198,7 @@ impl Mesh{
         Ok(mesh)
     }
 
-    pub fn create_primitive_buffers(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
+    pub fn create_primitive_buffers(&self) -> Result<(Vec<f32>, Vec<usize>), &str>{
         if !self.is_triangulated{
             return Err("Mesh is not triangulated");
         }
@@ -234,7 +234,7 @@ impl Mesh{
         Ok((verts, indices))
     }
 
-    pub fn create_primitive_buffers_wireframe(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
+    pub fn create_primitive_buffers_wireframe(&self) -> Result<(Vec<f32>, Vec<usize>), &str>{
         if !self.is_triangulated{
             return Err("Mesh is not triangulated");
         }
@@ -328,7 +328,7 @@ impl Mesh{
             if face.verts.len() == 3{
                 new_faces.push(face.clone());
             }else{
-                let mut indices: Vec<u16> = vec![0, 0, 0];
+                let mut indices: Vec<usize> = vec![0, 0, 0];
 
                 for i in 0..face.verts.len()-1{
                     indices[0] = face.verts[0];
@@ -344,7 +344,7 @@ impl Mesh{
         Ok(())
     }
 
-    pub fn create_primitive_buffers_flatshaded(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
+    pub fn create_primitive_buffers_flatshaded(&self) -> Result<(Vec<f32>, Vec<usize>), &str>{
         if !self.is_triangulated{
             return Err("Mesh is not triangulated");
         }
@@ -375,7 +375,7 @@ impl Mesh{
 
             let f_normal = (v2 - v1).cross(&(v3-v1)).normalize();
 
-            let final_tri: (u16, u16, u16);
+            let final_tri: (usize, usize, usize);
 
             if is_used[face.verts[2] as usize]{ // duplicate vertex
                 // TODO try rearanging
@@ -386,7 +386,7 @@ impl Mesh{
                 //     final_tri = (face.verts[2], face.verts[0], face.verts[1]);
                 //     is_used[face.verts[1] as usize] = true;
                 // } else{
-                    final_tri = (face.verts[0], face.verts[1], (verts.len() / vert_attr_count) as u16);// set to the last element, before pushing the vert!
+                    final_tri = (face.verts[0], face.verts[1], (verts.len() / vert_attr_count) as usize);// set to the last element, before pushing the vert!
 
                     verts.push(self.verts[face.verts[2] as usize].pos.x);
                     verts.push(self.verts[face.verts[2] as usize].pos.y);
