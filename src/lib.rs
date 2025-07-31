@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use shaders::{FSHADER_FLAT, FSHADER_SMOOTH, VSHADER_FLAT, VSHADER_SMOOTH};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as GL, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader};
@@ -22,7 +24,7 @@ struct RenderedMesh{
     mesh: Mesh,
     shading: ShadingType,
     mesh_gl_buffers: Vec<GLBuffers>,
-    bb_gl_buffers: GLBuffers // bounding box gl buffers
+    bb_gl_buffers: Option<GLBuffers> // bounding box gl buffers
 }
 
 struct GLBuffers{
@@ -37,15 +39,22 @@ impl GLBuffers{
         gl.delete_buffer(Some(&(self.ebo)));
     }
 
-    pub fn split_into_chunks(vertices: &[f32], indices: &[usize]) -> Result<Vec<(Vec<f32>, Vec<u16>)>, String>{
+    pub fn split_into_chunks(vertices: &[f32], indices: &[usize], values_per_vertex: usize) -> Result<Vec<(Vec<f32>, Vec<u16>)>, String>{
         //TODO split into chunks here
-        if vertices.len() <= u16::MAX as usize{ // no need for split, inside a limit
+        if vertices.len() / values_per_vertex <= u16::MAX as usize{ // no need for split, inside a limit
             let indices_u16: Vec<u16> = indices.iter().map(|&i| i as u16).collect();
             return Ok(vec![(vertices.to_vec(), indices_u16)]);
         }else{
-            return Err("Chunk splitting not implemented!".into())
+            for i in (0..indices.len()).step_by(3){
+                
+            }
 
-                        // foreach face
+            // let mut indexes_to_vert_ids: HashMap<(i32, i32, i32), usize> = HashMap::new();
+            let mut vert_id_remap: HashMap<usize, u16> = HashMap::new();
+
+            return Err("Chunk splitting not implemented!".into());
+
+            // foreach face
             //      chunk_ids = map.register(face.verts) 
             //      chunk_verts.add(verts)
             //      chunk_faces.add(chunk_ids)
@@ -76,25 +85,12 @@ impl GLBuffers{
 }
 
 impl RenderedMesh{
-    pub fn create(gl: &WebGl2RenderingContext, mesh: Mesh, shading: ShadingType) -> Result<RenderedMesh, String>{
-        let (vertices, indices) = match shading {
-            ShadingType::Flat => mesh.create_primitive_buffers_flatshaded()?,
-            ShadingType::Smooth => mesh.create_primitive_buffers()?,
-            ShadingType::Wireframe => mesh.create_primitive_buffers_wireframe()?
-        };
+    pub fn new(gl: &WebGl2RenderingContext, mesh: Mesh, shading: ShadingType) -> Result<RenderedMesh, String>{
+        let mut rendered_mesh = RenderedMesh { mesh: mesh, shading: shading, mesh_gl_buffers: vec![], bb_gl_buffers: None };
 
-        let mut mesh_gl_buffers : Vec<GLBuffers> = vec![];
+        rendered_mesh.reload_gl_buffers(gl)?;
 
-        for chunk in GLBuffers::split_into_chunks(&vertices, &indices)?{
-            let chunk_buffers = GLBuffers::create(&chunk.0, &chunk.1, gl)?;
-            mesh_gl_buffers.push(chunk_buffers);
-        }
-
-        let (bb_vertices, bb_indices) = mesh.create_bb_primitive_buffers()?;
-    
-        let bb_gl_buffers = GLBuffers::create(&bb_vertices, &bb_indices, &gl)?;
-
-        return Ok(RenderedMesh { mesh: mesh, shading: shading, mesh_gl_buffers: mesh_gl_buffers, bb_gl_buffers: bb_gl_buffers });
+        return Ok(rendered_mesh);
     }
 
     pub fn delete_mesh_gl_buffers(&mut self, gl: &WebGl2RenderingContext){
@@ -103,6 +99,10 @@ impl RenderedMesh{
         }
 
         self.mesh_gl_buffers.clear();
+
+        if let Some(bb_gl_buffers) = &self.bb_gl_buffers{
+            bb_gl_buffers.delete(gl);
+        }
     }
 
     pub fn reload_gl_buffers(&mut self, gl: &WebGl2RenderingContext)-> Result<(), String> {
@@ -114,14 +114,25 @@ impl RenderedMesh{
             ShadingType::Wireframe => self.mesh.create_primitive_buffers_wireframe()?
         };
 
+        let values_per_vertex = match self.shading {
+            ShadingType::Flat => 6, // pos x,y,z + normal x,y,z
+            ShadingType::Smooth => 6, // pos + normal
+            ShadingType::Wireframe => 3 // pos
+        };
+
         let mut mesh_gl_buffers : Vec<GLBuffers> = vec![];
 
-        for chunk in GLBuffers::split_into_chunks(&vertices, &indices)?{
+        for chunk in GLBuffers::split_into_chunks(&vertices, &indices, values_per_vertex)?{
             let chunk_buffers = GLBuffers::create(&chunk.0, &chunk.1, gl)?;
             mesh_gl_buffers.push(chunk_buffers);
         }
 
         self.mesh_gl_buffers = mesh_gl_buffers;
+
+        let (bb_vertices, bb_indices) = self.mesh.create_bb_primitive_buffers()?;
+        let bb_gl_buffers = GLBuffers::create(&bb_vertices, &bb_indices, &gl)?;
+
+        self.bb_gl_buffers = Some(bb_gl_buffers);
 
         Ok(())
     }
@@ -268,13 +279,12 @@ impl Renderer {
 
         if let Some(mut current_mesh) = self.rendered_mesh.take(){ // delete old gl buffers
             current_mesh.delete_mesh_gl_buffers(gl);
-            current_mesh.bb_gl_buffers.delete(gl);
             shading = current_mesh.shading;
         }
 
         let mesh = Mesh::load_obj(&mesh_str)?;
 
-        self.rendered_mesh = Some(RenderedMesh::create(gl, mesh, shading)?);
+        self.rendered_mesh = Some(RenderedMesh::new(gl, mesh, shading)?);
 
         //console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
 
@@ -461,11 +471,11 @@ impl Renderer {
                 }
             }
 
-            if self.is_bb_visible{            //render bounding box
-                let bb_vbo = &rendered_mesh.bb_gl_buffers.vbo;
-                let bb_ebo = &rendered_mesh.bb_gl_buffers.ebo;
+            if self.is_bb_visible && let Some(bb_gl_buffers) = &rendered_mesh.bb_gl_buffers{            //render bounding box
+                let bb_vbo = &bb_gl_buffers.vbo;
+                let bb_ebo = &bb_gl_buffers.ebo;
 
-                let bb_ebo_size = rendered_mesh.bb_gl_buffers.ebo_size;
+                let bb_ebo_size = bb_gl_buffers.ebo_size;
 
                 let bb_program = &self.programs.program_lines;
 
