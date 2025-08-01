@@ -2,6 +2,7 @@ use nalgebra::{Point3, Vector3};
 use std::{f32::{INFINITY, NEG_INFINITY}, str::FromStr};
 use web_sys::{console};
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 pub struct Vertex{
     pos: Vector3<f32>,
@@ -190,6 +191,13 @@ impl Mesh{
         
         let mut indices = vec![];
 
+        let mut edge_set: HashSet<(usize, usize)> = HashSet::new();
+
+        let mut is_new_edge = |a: usize, b: usize| -> bool {
+            let (min, max) = if a < b { (a, b) } else { (b, a) };
+            return edge_set.insert((min, max));
+        };
+
         for vert in &(self.verts){
             verts.push(vert.pos.x);
             verts.push(vert.pos.y);
@@ -197,9 +205,9 @@ impl Mesh{
         }
 
         for face in &(self.faces){
-            indices.push(face.verts[0]); indices.push(face.verts[1]);
-            indices.push(face.verts[1]); indices.push(face.verts[2]);
-            indices.push(face.verts[2]); indices.push(face.verts[0]);
+            if is_new_edge(face.verts[0], face.verts[1]){ indices.push(face.verts[0]); indices.push(face.verts[1]);}
+            if is_new_edge(face.verts[1], face.verts[2]){ indices.push(face.verts[1]); indices.push(face.verts[2]);}
+            if is_new_edge(face.verts[2], face.verts[0]){ indices.push(face.verts[2]); indices.push(face.verts[0]);}
         }
 
         Ok((verts, indices))
