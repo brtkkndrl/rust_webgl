@@ -241,7 +241,7 @@ impl Camera {
         self.angle_x_deg += mouse_move_vec.y * Camera::MOUSE_SENSITIVITY;
 		self.angle_y_deg += mouse_move_vec.x * Camera::MOUSE_SENSITIVITY;
 
-		self.angle_x_deg = self.angle_x_deg.clamp( -90.0 + 0.1, 90.0 - 0.1); // TODO should be self.angle_y_deg
+		self.angle_x_deg = self.angle_x_deg.clamp( -90.0 + 0.1, 90.0 - 0.1);
 
         let target_to_self_quaternion =  
         UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y_deg.to_radians())

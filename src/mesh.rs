@@ -20,14 +20,6 @@ pub struct Mesh{
     bb_max: Vector3<f32>
 }
 
-#[derive(PartialEq, Eq)]
-enum ParsingState{//TODO use or get rid of
-    ParsingVerts,
-    ParsingNormals,
-    ParsingFacesSimple,
-    ParsingFacesComplex
-}
-
 impl Mesh{
     pub fn load_obj(obj_str: &String) -> Result<Mesh, String>{
         let mut obj_vertices: Vec<Vector3<f32>> = vec![];
@@ -52,29 +44,6 @@ impl Mesh{
             let words: Vec<&str> = line.split(' ').collect();
 
             let first_word = words[0].trim();
-
-        //     match parsing_state{
-        //         ParsingState::ParsingVerts => {
-        //             if first_word == "vn"{parsing_state = ParsingState::ParsingNormals};
-
-        //             if first_word != "v"{return Err(format!("Expected vertex definition, found: {first_word}").to_string());}
-
-        //             obj_vertices.push(Vector3::new(
-        //                     f32::from_str(words[1].trim()).map_err(|e| e.to_string())?,
-        //                     f32::from_str(words[2].trim()).map_err(|e| e.to_string())?,
-        //                     f32::from_str(words[3].trim()).map_err(|e| e.to_string())?
-        //             ));
-        //         },
-        //         ParsingState::ParsingNormals => {
-        //             if first_word != "vn"{return Err(format!("Expected normal definition, found: {first_word}").to_string());}
-        //         },
-        //         ParsingState::ParsingFacesSimple => {
-        //             if first_word != "f"{return Err(format!("Expected simple face definition, found: {first_word}").to_string());}
-        //         },
-        //         ParsingState::ParsingFacesComplex => {
-        //             if first_word != "f"{return Err(format!("Expected complex face definition, found: {first_word}").to_string());}
-        //         },
-        //     }
 
             match first_word {
                 "v" => 
@@ -121,23 +90,9 @@ impl Mesh{
                         }
                     }
                     obj_faces.push(obj_face);
-
-
-                    // let mut temp_verts : Vec<u16> = vec![];
-                    // for word in &words[1..] {
-                    //     temp_verts.push(u16::from_str(&word.trim()).unwrap()-1);
-                    // }
-                    // faces.push(Face{verts: temp_verts.clone()});
-
-                    // if temp_verts.len() > 3 {
-                    //     is_triangulated = false;
-                    // }
-
-                    //console::log_1(&format!("face").into());
                 },
                 "" => {},
                 _ => {
-                    // console::log_1(&("Can't load obj").into());
                     return Err(format!("Unexpected character: {first_word}").to_string())
                 }
             }
@@ -218,16 +173,8 @@ impl Mesh{
         }
 
         for face in &(self.faces){
-            if face.verts.len() > 3{ // TODO it should not happen as there is triangulation test
-                for i in 0..face.verts.len()-1{
-                    indices.push(face.verts[0]);
-                    indices.push(face.verts[i]);
-                    indices.push(face.verts[i+1]);
-                }
-            }else{
-                for vert in &(face.verts){
-                    indices.push(*vert);
-                }
+            for vert in &(face.verts){
+                indices.push(*vert);
             }
         }
 
@@ -378,14 +325,6 @@ impl Mesh{
             let final_tri: (usize, usize, usize);
 
             if is_used[face.verts[2] as usize]{ // duplicate vertex
-                // TODO try rearanging
-                // if !is_used[face.verts[0] as usize] {
-                //     final_tri = (face.verts[1], face.verts[2], face.verts[0]);
-                //     is_used[face.verts[0] as usize] = true;
-                // } else if !is_used[face.verts[1] as usize] {
-                //     final_tri = (face.verts[2], face.verts[0], face.verts[1]);
-                //     is_used[face.verts[1] as usize] = true;
-                // } else{
                     final_tri = (face.verts[0], face.verts[1], (verts.len() / vert_attr_count) as usize);// set to the last element, before pushing the vert!
 
                     verts.push(self.verts[face.verts[2] as usize].pos.x);
