@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use js_sys::Math::ceil;
 use shaders::{FSHADER_FLAT, FSHADER_SMOOTH, VSHADER_FLAT, VSHADER_SMOOTH};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as GL, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader};
@@ -40,29 +41,51 @@ impl GLBuffers{
     }
 
     pub fn split_into_chunks(vertices: &[f32], indices: &[usize], values_per_vertex: usize) -> Result<Vec<(Vec<f32>, Vec<u16>)>, String>{
-        //TODO split into chunks here
+        let mut chunks: Vec<(Vec<f32>, Vec<u16>)> = vec![];
+
         if vertices.len() / values_per_vertex <= u16::MAX as usize{ // no need for split, inside a limit
             let indices_u16: Vec<u16> = indices.iter().map(|&i| i as u16).collect();
-            return Ok(vec![(vertices.to_vec(), indices_u16)]);
+            chunks.push((vertices.to_vec(), indices_u16));
         }else{
-            for i in (0..indices.len()).step_by(3){
+            let preferred_chunk_size = u16::MAX as usize;
                 
+            let mut chunk_verts: Vec<f32> = vec![];
+            let mut chunk_indices: Vec<u16> = vec![];
+            let mut vert_id_remap: HashMap<usize, u16> = HashMap::new();// maps to indeces in chunk_verts
+
+            for i in (0..indices.len()).step_by(3){ // go by triangles -> 3 verts
+                let old_vert_ids: Vec<usize> = vec![indices[i], indices[i + 1], indices[i + 2]];
+
+                for old_vert_id in old_vert_ids{
+                    // remap to new id
+                   let new_vert_id = *vert_id_remap.entry(old_vert_id).or_insert_with(|| {
+                        let new_id = (chunk_verts.len() / values_per_vertex) as u16;
+                        let start = old_vert_id*values_per_vertex;
+                        chunk_verts.extend_from_slice(&vertices[start..(start + values_per_vertex)]);
+                        return  new_id;
+                    });
+                    chunk_indices.push(new_vert_id);
+                }
+
+                if chunk_verts.len() / values_per_vertex + 3 > preferred_chunk_size as usize{ // split chunk
+                    chunks.push((chunk_verts.drain(..).collect(), chunk_indices.drain(..).collect()));
+                    vert_id_remap.clear();
+                }
             }
 
-            // let mut indexes_to_vert_ids: HashMap<(i32, i32, i32), usize> = HashMap::new();
-            let mut vert_id_remap: HashMap<usize, u16> = HashMap::new();
-
-            return Err("Chunk splitting not implemented!".into());
-
-            // foreach face
-            //      chunk_ids = map.register(face.verts) 
-            //      chunk_verts.add(verts)
-            //      chunk_faces.add(chunk_ids)
-            //      if map.total_unique > MAX-3 or chunk_size = total_size/ (total_size/MAX_CHUNK_SIZE).ceil() -3:
-            //          break
-            //  
-
+            if !chunk_indices.is_empty(){//push last chunk
+                chunks.push((chunk_verts, chunk_indices));
+            }
         }
+        
+        if chunks.len() > 1{
+            console::log_1(&format!("Split {}v {}f into chunks:", vertices.len()/values_per_vertex, indices.len()/3).into());
+            for chunk in &chunks{
+                console::log_1(&format!("{}v {}f", chunk.0.len() / values_per_vertex, chunk.1.len() / 3).into());
+            }  
+        }
+
+        return Ok(chunks);
     }
 
     pub fn create(vertices: &[f32], indices: &[u16], gl: &WebGl2RenderingContext) -> Result<GLBuffers, String>{
@@ -403,26 +426,6 @@ impl Renderer {
 
             //console::log_1(&JsValue::from_str(&format!("ebo_size: {}", ebo_size)));
         
-            // Vertex attributes
-            if rendered_mesh.shading == ShadingType::Wireframe{ // just position attribute for wireframe                
-                let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
-                gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
-                gl.enable_vertex_attrib_array(pos_attrib);
-
-                if self.last_normal_attrib_pos >= 0{
-                    gl.disable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
-                    self.last_normal_attrib_pos = -1;
-                }
-            }else{ // position and normal for flat and smooth shading
-                let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
-                gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 6 * 4, 0);
-                gl.enable_vertex_attrib_array(pos_attrib);
-        
-                self.last_normal_attrib_pos = gl.get_attrib_location(&program, "aNormal");
-                gl.vertex_attrib_pointer_with_i32(self.last_normal_attrib_pos as u32, 3, GL::FLOAT, false, 6 * 4, 3 * 4);
-                gl.enable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
-            }
-        
             let projection = Camera::projection_matrix(&(self.screen_dimensions));
             let view = self.camera.view_matrix();
             let model = Translation3::new(0.0, 0.0, 0.0).to_homogeneous();
@@ -463,6 +466,26 @@ impl Renderer {
 
                 gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
                 gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
+
+                // Vertex attributes
+                if rendered_mesh.shading == ShadingType::Wireframe{ // just position attribute for wireframe                
+                    let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
+                    gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
+                    gl.enable_vertex_attrib_array(pos_attrib);
+
+                    if self.last_normal_attrib_pos >= 0{
+                        gl.disable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
+                        self.last_normal_attrib_pos = -1;
+                    }
+                }else{ // position and normal for flat and smooth shading
+                    let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
+                    gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 6 * 4, 0);
+                    gl.enable_vertex_attrib_array(pos_attrib);
+            
+                    self.last_normal_attrib_pos = gl.get_attrib_location(&program, "aNormal");
+                    gl.vertex_attrib_pointer_with_i32(self.last_normal_attrib_pos as u32, 3, GL::FLOAT, false, 6 * 4, 3 * 4);
+                    gl.enable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
+                }
 
                 if rendered_mesh.shading == ShadingType::Wireframe{
                     gl.draw_elements_with_i32(GL::LINES, ebo_size, GL::UNSIGNED_SHORT, 0);
