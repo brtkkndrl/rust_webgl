@@ -40,7 +40,8 @@ impl GLBuffers{
         gl.delete_buffer(Some(&(self.ebo)));
     }
 
-    pub fn split_into_chunks(vertices: &[f32], indices: &[usize], values_per_vertex: usize) -> Result<Vec<(Vec<f32>, Vec<u16>)>, String>{
+    pub fn split_into_chunks(vertices: &[f32], indices: &[usize], 
+        values_per_vertex: usize, primitive_size: usize) -> Result<Vec<(Vec<f32>, Vec<u16>)>, String>{
         let mut chunks: Vec<(Vec<f32>, Vec<u16>)> = vec![];
 
         if vertices.len() / values_per_vertex <= u16::MAX as usize{ // no need for split, inside a limit
@@ -53,12 +54,12 @@ impl GLBuffers{
             let mut chunk_indices: Vec<u16> = vec![];
             let mut vert_id_remap: HashMap<usize, u16> = HashMap::new();// maps to indeces in chunk_verts
 
-            for i in (0..indices.len()).step_by(3){ // go by triangles -> 3 verts
-                let old_vert_ids: Vec<usize> = vec![indices[i], indices[i + 1], indices[i + 2]];
+            for i in (0..indices.len()).step_by(primitive_size){ // go by primitives
+                let old_vert_ids = &indices[i..i + primitive_size];
 
                 for old_vert_id in old_vert_ids{
                     // remap to new id
-                   let new_vert_id = *vert_id_remap.entry(old_vert_id).or_insert_with(|| {
+                   let new_vert_id = *vert_id_remap.entry(*old_vert_id).or_insert_with(|| {
                         let new_id = (chunk_verts.len() / values_per_vertex) as u16;
                         let start = old_vert_id*values_per_vertex;
                         chunk_verts.extend_from_slice(&vertices[start..(start + values_per_vertex)]);
@@ -137,15 +138,15 @@ impl RenderedMesh{
             ShadingType::Wireframe => self.mesh.create_primitive_buffers_wireframe()?
         };
 
-        let values_per_vertex = match self.shading {
-            ShadingType::Flat => 6, // pos x,y,z + normal x,y,z
-            ShadingType::Smooth => 6, // pos + normal
-            ShadingType::Wireframe => 3 // pos
+        let (values_per_vertex, primitive_size) = match self.shading {
+            ShadingType::Flat => (6, 3), // pos x,y,z + normal x,y,z, triangles
+            ShadingType::Smooth => (6, 3), // pos + normal, triangles
+            ShadingType::Wireframe => (3, 2) // pos, lines
         };
 
         let mut mesh_gl_buffers : Vec<GLBuffers> = vec![];
 
-        for chunk in GLBuffers::split_into_chunks(&vertices, &indices, values_per_vertex)?{
+        for chunk in GLBuffers::split_into_chunks(&vertices, &indices, values_per_vertex, primitive_size)?{
             let chunk_buffers = GLBuffers::create(&chunk.0, &chunk.1, gl)?;
             mesh_gl_buffers.push(chunk_buffers);
         }
