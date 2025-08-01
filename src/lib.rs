@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use js_sys::Math::ceil;
 use shaders::{FSHADER_FLAT, FSHADER_SMOOTH, VSHADER_FLAT, VSHADER_SMOOTH};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as GL, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader};
@@ -21,8 +24,8 @@ enum ShadingType{
 struct RenderedMesh{
     mesh: Mesh,
     shading: ShadingType,
-    gl_buffers: GLBuffers,
-    bb_gl_buffers: GLBuffers // bounding box gl buffers
+    mesh_gl_buffers: Vec<GLBuffers>,
+    bb_gl_buffers: Option<GLBuffers> // bounding box gl buffers
 }
 
 struct GLBuffers{
@@ -35,6 +38,55 @@ impl GLBuffers{
     pub fn delete(&self, gl: &WebGl2RenderingContext){
         gl.delete_buffer(Some(&(self.vbo)));
         gl.delete_buffer(Some(&(self.ebo)));
+    }
+
+    pub fn split_into_chunks(vertices: &[f32], indices: &[usize], 
+        values_per_vertex: usize, primitive_size: usize) -> Result<Vec<(Vec<f32>, Vec<u16>)>, String>{
+        let mut chunks: Vec<(Vec<f32>, Vec<u16>)> = vec![];
+
+        if vertices.len() / values_per_vertex <= u16::MAX as usize{ // no need for split, inside a limit
+            let indices_u16: Vec<u16> = indices.iter().map(|&i| i as u16).collect();
+            chunks.push((vertices.to_vec(), indices_u16));
+        }else{
+            let preferred_chunk_size = u16::MAX as usize;
+                
+            let mut chunk_verts: Vec<f32> = vec![];
+            let mut chunk_indices: Vec<u16> = vec![];
+            let mut vert_id_remap: HashMap<usize, u16> = HashMap::new();// maps to indeces in chunk_verts
+
+            for i in (0..indices.len()).step_by(primitive_size){ // go by primitives
+                let old_vert_ids = &indices[i..i + primitive_size];
+
+                for old_vert_id in old_vert_ids{
+                    // remap to new id
+                   let new_vert_id = *vert_id_remap.entry(*old_vert_id).or_insert_with(|| {
+                        let new_id = (chunk_verts.len() / values_per_vertex) as u16;
+                        let start = old_vert_id*values_per_vertex;
+                        chunk_verts.extend_from_slice(&vertices[start..(start + values_per_vertex)]);
+                        return  new_id;
+                    });
+                    chunk_indices.push(new_vert_id);
+                }
+
+                if chunk_verts.len() / values_per_vertex + 3 > preferred_chunk_size as usize{ // split chunk
+                    chunks.push((chunk_verts.drain(..).collect(), chunk_indices.drain(..).collect()));
+                    vert_id_remap.clear();
+                }
+            }
+
+            if !chunk_indices.is_empty(){//push last chunk
+                chunks.push((chunk_verts, chunk_indices));
+            }
+        }
+        
+        if chunks.len() > 1{
+            console::log_1(&format!("Split {}v {}f into chunks:", vertices.len()/values_per_vertex, indices.len()/3).into());
+            for chunk in &chunks{
+                console::log_1(&format!("{}v {}f", chunk.0.len() / values_per_vertex, chunk.1.len() / 3).into());
+            }  
+        }
+
+        return Ok(chunks);
     }
 
     pub fn create(vertices: &[f32], indices: &[u16], gl: &WebGl2RenderingContext) -> Result<GLBuffers, String>{
@@ -57,24 +109,28 @@ impl GLBuffers{
 }
 
 impl RenderedMesh{
-    pub fn create(gl: &WebGl2RenderingContext, mesh: Mesh, shading: ShadingType) -> Result<RenderedMesh, String>{
-        let (vertices, indices) = match shading {
-            ShadingType::Flat => mesh.create_primitive_buffers_flatshaded()?,
-            ShadingType::Smooth => mesh.create_primitive_buffers()?,
-            ShadingType::Wireframe => mesh.create_primitive_buffers_wireframe()?
-        };
+    pub fn new(gl: &WebGl2RenderingContext, mesh: Mesh, shading: ShadingType) -> Result<RenderedMesh, String>{
+        let mut rendered_mesh = RenderedMesh { mesh: mesh, shading: shading, mesh_gl_buffers: vec![], bb_gl_buffers: None };
 
-        let gl_buffers = GLBuffers::create(&vertices, &indices, &gl)?;
+        rendered_mesh.reload_gl_buffers(gl)?;
 
-        let (bb_vertices, bb_indices) = mesh.create_bb_primitive_buffers()?;
-    
-        let bb_gl_buffers = GLBuffers::create(&bb_vertices, &bb_indices, &gl)?;
-        
-        return Ok(RenderedMesh { mesh: mesh, shading: shading, gl_buffers: gl_buffers, bb_gl_buffers: bb_gl_buffers });
+        return Ok(rendered_mesh);
+    }
+
+    pub fn delete_mesh_gl_buffers(&mut self, gl: &WebGl2RenderingContext){
+        for chunk in &self.mesh_gl_buffers{
+            chunk.delete(gl);
+        }
+
+        self.mesh_gl_buffers.clear();
+
+        if let Some(bb_gl_buffers) = &self.bb_gl_buffers{
+            bb_gl_buffers.delete(gl);
+        }
     }
 
     pub fn reload_gl_buffers(&mut self, gl: &WebGl2RenderingContext)-> Result<(), String> {
-        self.gl_buffers.delete(gl);
+        self.delete_mesh_gl_buffers(gl);
 
         let (vertices, indices) = match self.shading {
             ShadingType::Flat => self.mesh.create_primitive_buffers_flatshaded()?,
@@ -82,7 +138,25 @@ impl RenderedMesh{
             ShadingType::Wireframe => self.mesh.create_primitive_buffers_wireframe()?
         };
 
-        self.gl_buffers = GLBuffers::create(&vertices, &indices, gl).unwrap();
+        let (values_per_vertex, primitive_size) = match self.shading {
+            ShadingType::Flat => (6, 3), // pos x,y,z + normal x,y,z, triangles
+            ShadingType::Smooth => (6, 3), // pos + normal, triangles
+            ShadingType::Wireframe => (3, 2) // pos, lines
+        };
+
+        let mut mesh_gl_buffers : Vec<GLBuffers> = vec![];
+
+        for chunk in GLBuffers::split_into_chunks(&vertices, &indices, values_per_vertex, primitive_size)?{
+            let chunk_buffers = GLBuffers::create(&chunk.0, &chunk.1, gl)?;
+            mesh_gl_buffers.push(chunk_buffers);
+        }
+
+        self.mesh_gl_buffers = mesh_gl_buffers;
+
+        let (bb_vertices, bb_indices) = self.mesh.create_bb_primitive_buffers()?;
+        let bb_gl_buffers = GLBuffers::create(&bb_vertices, &bb_indices, &gl)?;
+
+        self.bb_gl_buffers = Some(bb_gl_buffers);
 
         Ok(())
     }
@@ -168,7 +242,7 @@ impl Camera {
         self.angle_x_deg += mouse_move_vec.y * Camera::MOUSE_SENSITIVITY;
 		self.angle_y_deg += mouse_move_vec.x * Camera::MOUSE_SENSITIVITY;
 
-		self.angle_x_deg = self.angle_x_deg.clamp( -90.0 + 0.1, 90.0 - 0.1); // TODO should be self.angle_y_deg
+		self.angle_x_deg = self.angle_x_deg.clamp( -90.0 + 0.1, 90.0 - 0.1);
 
         let target_to_self_quaternion =  
         UnitQuaternion::from_axis_angle(&Vector3::y_axis(), self.angle_y_deg.to_radians())
@@ -227,15 +301,14 @@ impl Renderer {
         
         let mut shading = ShadingType::Flat;
 
-        if let Some(current_mesh) = self.rendered_mesh.take(){ // delete old gl buffers
-            current_mesh.gl_buffers.delete(gl);
-            current_mesh.bb_gl_buffers.delete(gl);
+        if let Some(mut current_mesh) = self.rendered_mesh.take(){ // delete old gl buffers
+            current_mesh.delete_mesh_gl_buffers(gl);
             shading = current_mesh.shading;
         }
 
-        let mesh = Mesh::load_obj(&mesh_str).unwrap();
+        let mesh = Mesh::load_obj(&mesh_str)?;
 
-        self.rendered_mesh = Some(RenderedMesh::create(gl, mesh, shading)?);
+        self.rendered_mesh = Some(RenderedMesh::new(gl, mesh, shading)?);
 
         //console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
 
@@ -344,11 +417,6 @@ impl Renderer {
         let gl = &(self.gl);
 
         if let Some(ref rendered_mesh) = self.rendered_mesh{
-            let vbo = &rendered_mesh.gl_buffers.vbo;
-            let ebo = &rendered_mesh.gl_buffers.ebo;
-
-            let ebo_size = rendered_mesh.gl_buffers.ebo_size;
-
             let program = match rendered_mesh.shading{
                 ShadingType::Flat => {&self.programs.program_flat},
                 ShadingType::Smooth => {&self.programs.program_smooth},
@@ -357,30 +425,7 @@ impl Renderer {
 
             gl.use_program(Some(program));
 
-            gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
-            gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
-
             //console::log_1(&JsValue::from_str(&format!("ebo_size: {}", ebo_size)));
-        
-            // Vertex attributes
-            if rendered_mesh.shading == ShadingType::Wireframe{ // just position attribute for wireframe                
-                let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
-                gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
-                gl.enable_vertex_attrib_array(pos_attrib);
-
-                if self.last_normal_attrib_pos >= 0{
-                    gl.disable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
-                    self.last_normal_attrib_pos = -1;
-                }
-            }else{ // position and normal for flat and smooth shading
-                let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
-                gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 6 * 4, 0);
-                gl.enable_vertex_attrib_array(pos_attrib);
-        
-                self.last_normal_attrib_pos = gl.get_attrib_location(&program, "aNormal");
-                gl.vertex_attrib_pointer_with_i32(self.last_normal_attrib_pos as u32, 3, GL::FLOAT, false, 6 * 4, 3 * 4);
-                gl.enable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
-            }
         
             let projection = Camera::projection_matrix(&(self.screen_dimensions));
             let view = self.camera.view_matrix();
@@ -415,17 +460,46 @@ impl Renderer {
             gl.clear_color(0.0, 0.0, 0.0, 1.0);
             gl.clear(web_sys::WebGl2RenderingContext::COLOR_BUFFER_BIT | web_sys::WebGl2RenderingContext::DEPTH_BUFFER_BIT);
 
-            if rendered_mesh.shading == ShadingType::Wireframe{
-                gl.draw_elements_with_i32(GL::LINES, ebo_size, GL::UNSIGNED_SHORT, 0);
-            }else{
-                gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
+            for chunk in &rendered_mesh.mesh_gl_buffers{
+                let vbo = &chunk.vbo;
+                let ebo = &chunk.ebo;
+                let ebo_size = chunk.ebo_size;
+
+                gl.bind_buffer(GL::ARRAY_BUFFER, Some(&vbo));
+                gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&ebo));
+
+                // Vertex attributes
+                if rendered_mesh.shading == ShadingType::Wireframe{ // just position attribute for wireframe                
+                    let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
+                    gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
+                    gl.enable_vertex_attrib_array(pos_attrib);
+
+                    if self.last_normal_attrib_pos >= 0{
+                        gl.disable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
+                        self.last_normal_attrib_pos = -1;
+                    }
+                }else{ // position and normal for flat and smooth shading
+                    let pos_attrib = gl.get_attrib_location(&program, "aPosition") as u32;
+                    gl.vertex_attrib_pointer_with_i32(pos_attrib, 3, GL::FLOAT, false, 6 * 4, 0);
+                    gl.enable_vertex_attrib_array(pos_attrib);
+            
+                    self.last_normal_attrib_pos = gl.get_attrib_location(&program, "aNormal");
+                    gl.vertex_attrib_pointer_with_i32(self.last_normal_attrib_pos as u32, 3, GL::FLOAT, false, 6 * 4, 3 * 4);
+                    gl.enable_vertex_attrib_array(self.last_normal_attrib_pos as u32);
+                }
+
+                if rendered_mesh.shading == ShadingType::Wireframe{
+                    gl.draw_elements_with_i32(GL::LINES, ebo_size, GL::UNSIGNED_SHORT, 0);
+                }else{
+                    gl.draw_elements_with_i32(GL::TRIANGLES, ebo_size, GL::UNSIGNED_SHORT, 0);
+                }
             }
 
-            if self.is_bb_visible{            //render bounding box
-                let bb_vbo = &rendered_mesh.bb_gl_buffers.vbo;
-                let bb_ebo = &rendered_mesh.bb_gl_buffers.ebo;
+            if self.is_bb_visible && let Some(bb_gl_buffers) = &rendered_mesh.bb_gl_buffers{            //render bounding box
+                let bb_vbo = &bb_gl_buffers.vbo;
+                let bb_ebo = &bb_gl_buffers.ebo;
 
-                let bb_ebo_size = rendered_mesh.bb_gl_buffers.ebo_size;
+                let bb_ebo_size = bb_gl_buffers.ebo_size;
 
                 let bb_program = &self.programs.program_lines;
 

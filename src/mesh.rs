@@ -1,6 +1,9 @@
-use nalgebra::{Vector3};
+use nalgebra::{Point3, Vector3};
 use std::{f32::{INFINITY, NEG_INFINITY}, str::FromStr};
 use web_sys::{console};
+use std::collections::HashMap;
+use std::collections::HashSet;
+
 pub struct Vertex{
     pos: Vector3<f32>,
     normal: Vector3<f32>
@@ -8,7 +11,7 @@ pub struct Vertex{
 
 #[derive(Clone)]
 pub struct Face{
-    verts: Vec<u16>
+    verts: Vec<usize>
 }
 pub struct Mesh{
     verts: Vec<Vertex>,
@@ -19,26 +22,20 @@ pub struct Mesh{
 }
 
 impl Mesh{
-    pub fn basic_triangle() -> Result<Mesh, String>{
-        
-        let verts = vec![
-            Vertex{pos: Vector3::new(-0.5, -0.5, 0.0), normal: Vector3::new(0.0, 0.0, 1.0)},
-            Vertex{pos: Vector3::new(0.5, -0.5, 0.0), normal: Vector3::new(0.0, 0.0, 1.0)},
-            Vertex{pos: Vector3::new(0.0,  0.5, 0.0), normal: Vector3::new(0.0, 0.0, 1.0)}
-        ];
-    
-        let faces = vec![
-            Face { verts: vec![0, 1, 2] }
-        ];
-    
-        Ok(Mesh{verts: verts, faces: faces, is_triangulated: true, bb_min: Vector3::new(0.0,0.0,0.0), bb_max: Vector3::new(0.0,0.0,0.0)})
-    }
+    pub fn load_obj(obj_str: &String) -> Result<Mesh, String>{
+        let mut obj_vertices: Vec<Vector3<f32>> = vec![];
+        let mut obj_normals: Vec<Vector3<f32>> = vec![];
+        let mut obj_faces: Vec<Vec<(i32, i32, i32)>> = vec![];
 
-    pub fn load_obj(obj_str: &String) -> Result<Mesh, &str>{
         let mut verts : Vec<Vertex> = vec![];
         let mut faces : Vec<Face> = vec![];
 
         let mut is_triangulated = true;
+        let mut has_normals_defined = false;
+        let mut found_simple_face_def = false;
+        let mut found_complex_face_def = false;
+
+        // let mut parsing_state: ParsingState = ParsingState::ParsingVerts;
 
         for line in obj_str.lines() {
             if line.trim() == "" || line.trim().starts_with("#"){
@@ -47,53 +44,117 @@ impl Mesh{
 
             let words: Vec<&str> = line.split(' ').collect();
 
-            match words[0].trim() {
+            let first_word = words[0].trim();
+
+            match first_word {
                 "v" => 
                 {
-                    // console::log_1(&format!("vec {:?} {:?} {:?}", f32::from_str(words[1].trim()).unwrap(),
-                    // f32::from_str(words[2].trim()).unwrap(),
-                    // f32::from_str(words[3].trim()).unwrap()).into());
-
-                    verts.push(Vertex{
-                        pos: Vector3::new(
-                            f32::from_str(words[1].trim()).unwrap(),
-                            f32::from_str(words[2].trim()).unwrap(),
-                            f32::from_str(words[3].trim()).unwrap()
-                        ),
-                        normal: Vector3::new(0.0,0.0,0.0)})
+                    obj_vertices.push(Vector3::new(
+                            f32::from_str(words[1].trim()).map_err(|e| e.to_string())?,
+                            f32::from_str(words[2].trim()).map_err(|e| e.to_string())?,
+                            f32::from_str(words[3].trim()).map_err(|e| e.to_string())?
+                    ));
                 },
+                "vn" =>{
+                    obj_normals.push(Vector3::new(
+                            f32::from_str(words[1].trim()).map_err(|e| e.to_string())?,
+                            f32::from_str(words[2].trim()).map_err(|e| e.to_string())?,
+                            f32::from_str(words[3].trim()).map_err(|e| e.to_string())?
+                    ));
+                }
                 "f" => 
                 {
-                    //console::log_1(&format!("face").into());
-                    let mut temp_verts : Vec<u16> = vec![];
+                    let mut obj_face: Vec<(i32, i32, i32)> = vec![];
+                    if line.contains("/"){// vert/texture/normal
+                        if found_simple_face_def{return Err("Invalid face definition, expected simple".to_string())}
 
-                    for word in &words[1..] {
-                        temp_verts.push(u16::from_str(&word.trim()).unwrap()-1);
-                    }
-                    faces.push(Face{verts: temp_verts.clone()});
+                        found_complex_face_def = true;
 
-                    if temp_verts.len() > 3 {
-                        is_triangulated = false;
+                        for word in &words[1..] {
+                            let parts: Vec<&str> = word.trim().split('/').collect();
+
+                            if parts.len() != 3{return Err("Invalid face definition".to_string())}
+
+                            let vert_index = i32::from_str(&parts[0]).unwrap()-1;
+                            let normal_index = i32::from_str(&parts[2]).unwrap()-1;
+
+                            obj_face.push((vert_index, -1, normal_index));
+                        }
+                    }else{//simple definition
+                        if found_complex_face_def{return Err("Invalid face definition, expected complex".to_string())}
+
+                        found_simple_face_def = true;
+
+                        for word in &words[1..] {
+                            let vert_index = i32::from_str(&word.trim()).unwrap()-1;
+                            obj_face.push((vert_index, -1, -1));
+                        }
                     }
+                    obj_faces.push(obj_face);
                 },
                 "" => {},
                 _ => {
-                    console::log_1(&("Can't load obj").into());
-                    return Err("Can't load obj")
+                    return Err(format!("Unexpected character: {first_word}").to_string())
                 }
             }
         }
+
+        assert!(!(found_simple_face_def && found_complex_face_def));
+
+        // Transform obj_verts, obj_normals, and obj_faces into Vertex, and Face vectors
+
+        if found_simple_face_def{
+            for obj_vert in obj_vertices{
+                verts.push(Vertex { pos: obj_vert, normal: Vector3::new(0.0,0.0,0.0) });
+            }
+            for obj_face in obj_faces{
+                let mut temp_vert_ids : Vec<usize> = vec![];
+                for vert_uv_normal_def in obj_face{
+                    temp_vert_ids.push(vert_uv_normal_def.0 as usize);
+                }
+                if temp_vert_ids.len() > 3{is_triangulated = false;}
+                faces.push(Face{verts: temp_vert_ids.clone()});
+            }
+        }else if found_complex_face_def{
+            has_normals_defined = true;
+
+            let mut indexes_to_vert_ids: HashMap<(i32, i32, i32), usize> = HashMap::new();
+
+            for obj_face in obj_faces{
+                let mut temp_vert_ids : Vec<usize> = vec![];
+
+                for vert_uv_normal_def in obj_face{
+                    if let Some(vert_id) = indexes_to_vert_ids.get(&vert_uv_normal_def){//already exists
+                        temp_vert_ids.push(vert_id.clone());
+                    }else{
+                        verts.push(Vertex { pos: obj_vertices[vert_uv_normal_def.0 as usize],
+                             normal: obj_normals[vert_uv_normal_def.2 as usize] });
+                        let new_vert_index =  usize::try_from(verts.len() - 1).expect("Exceeded vert limit");
+                        indexes_to_vert_ids.insert(vert_uv_normal_def, new_vert_index);
+                        temp_vert_ids.push(new_vert_index);
+                    }
+                }
+
+                if temp_vert_ids.len() > 3{is_triangulated = false;}
+                faces.push(Face{verts: temp_vert_ids.clone()});
+            }
+        }
         
-        console::log_1(&format!("loaded {:?}v {:?}f", verts.len(), faces.len()).into());
-        let mut mesh = Mesh{verts: verts, faces: faces, is_triangulated: is_triangulated, bb_min: Vector3::new(0.0,0.0,0.0), bb_max: Vector3::new(0.0,0.0,0.0)};
-        mesh.derrive_normals_from_faces().unwrap();
-        mesh.triangulate_faces().unwrap();
+        let mut mesh = Mesh{verts: verts, faces: faces, is_triangulated: is_triangulated,
+            bb_min: Vector3::new(0.0,0.0,0.0), bb_max: Vector3::new(0.0,0.0,0.0)};
+        if found_simple_face_def{
+            mesh.derrive_normals_from_faces()?;
+        }
+        mesh.triangulate_faces()?;
         mesh.move_pivot_to_center();
-        //mesh.compute_flatshaded().unwrap();
+        
+        console::log_1(&format!("loaded {:?}v {:?}f", mesh.verts.len(), mesh.faces.len()).into());
+        console::log_1(&format!("was triangulated: {is_triangulated}").into());
+        console::log_1(&format!("had normals: {found_complex_face_def}").into());
         Ok(mesh)
     }
 
-    pub fn create_primitive_buffers(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
+    pub fn create_primitive_buffers(&self) -> Result<(Vec<f32>, Vec<usize>), &str>{
         if !self.is_triangulated{
             return Err("Mesh is not triangulated");
         }
@@ -113,23 +174,15 @@ impl Mesh{
         }
 
         for face in &(self.faces){
-            if face.verts.len() > 3{ // TODO it should not happen as there is triangulation test
-                for i in 0..face.verts.len()-1{
-                    indices.push(face.verts[0]);
-                    indices.push(face.verts[i]);
-                    indices.push(face.verts[i+1]);
-                }
-            }else{
-                for vert in &(face.verts){
-                    indices.push(*vert);
-                }
+            for vert in &(face.verts){
+                indices.push(*vert);
             }
         }
 
         Ok((verts, indices))
     }
 
-    pub fn create_primitive_buffers_wireframe(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
+    pub fn create_primitive_buffers_wireframe(&self) -> Result<(Vec<f32>, Vec<usize>), &str>{
         if !self.is_triangulated{
             return Err("Mesh is not triangulated");
         }
@@ -138,6 +191,13 @@ impl Mesh{
         
         let mut indices = vec![];
 
+        let mut edge_set: HashSet<(usize, usize)> = HashSet::new();
+
+        let mut is_new_edge = |a: usize, b: usize| -> bool {
+            let (min, max) = if a < b { (a, b) } else { (b, a) };
+            return edge_set.insert((min, max));
+        };
+
         for vert in &(self.verts){
             verts.push(vert.pos.x);
             verts.push(vert.pos.y);
@@ -145,9 +205,9 @@ impl Mesh{
         }
 
         for face in &(self.faces){
-            indices.push(face.verts[0]); indices.push(face.verts[1]);
-            indices.push(face.verts[1]); indices.push(face.verts[2]);
-            indices.push(face.verts[2]); indices.push(face.verts[0]);
+            if is_new_edge(face.verts[0], face.verts[1]){ indices.push(face.verts[0]); indices.push(face.verts[1]);}
+            if is_new_edge(face.verts[1], face.verts[2]){ indices.push(face.verts[1]); indices.push(face.verts[2]);}
+            if is_new_edge(face.verts[2], face.verts[0]){ indices.push(face.verts[2]); indices.push(face.verts[0]);}
         }
 
         Ok((verts, indices))
@@ -213,13 +273,17 @@ impl Mesh{
     }
 
     pub fn triangulate_faces(&mut self) ->Result<(), &str>{
+        if self.is_triangulated{
+            return Ok(());
+        }
+
         let mut new_faces: Vec<Face> = vec![];
         
         for face in &(self.faces){
             if face.verts.len() == 3{
                 new_faces.push(face.clone());
             }else{
-                let mut indices: Vec<u16> = vec![0, 0, 0];
+                let mut indices: Vec<usize> = vec![0, 0, 0];
 
                 for i in 0..face.verts.len()-1{
                     indices[0] = face.verts[0];
@@ -235,7 +299,7 @@ impl Mesh{
         Ok(())
     }
 
-    pub fn create_primitive_buffers_flatshaded(&self) -> Result<(Vec<f32>, Vec<u16>), &str>{
+    pub fn create_primitive_buffers_flatshaded(&self) -> Result<(Vec<f32>, Vec<usize>), &str>{
         if !self.is_triangulated{
             return Err("Mesh is not triangulated");
         }
@@ -266,18 +330,10 @@ impl Mesh{
 
             let f_normal = (v2 - v1).cross(&(v3-v1)).normalize();
 
-            let final_tri: (u16, u16, u16);
+            let final_tri: (usize, usize, usize);
 
             if is_used[face.verts[2] as usize]{ // duplicate vertex
-                // TODO try rearanging
-                // if !is_used[face.verts[0] as usize] {
-                //     final_tri = (face.verts[1], face.verts[2], face.verts[0]);
-                //     is_used[face.verts[0] as usize] = true;
-                // } else if !is_used[face.verts[1] as usize] {
-                //     final_tri = (face.verts[2], face.verts[0], face.verts[1]);
-                //     is_used[face.verts[1] as usize] = true;
-                // } else{
-                    final_tri = (face.verts[0], face.verts[1], (verts.len() / vert_attr_count) as u16);// set to the last element, before pushing the vert!
+                    final_tri = (face.verts[0], face.verts[1], (verts.len() / vert_attr_count) as usize);// set to the last element, before pushing the vert!
 
                     verts.push(self.verts[face.verts[2] as usize].pos.x);
                     verts.push(self.verts[face.verts[2] as usize].pos.y);
