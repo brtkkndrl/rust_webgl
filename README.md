@@ -1,6 +1,6 @@
 ## Simple .obj viewer for the browser using WebGL 2
 
-<a href="https://brtek007.github.io/rust_webgl/">View on GitHub Pages</a>
+<a href="https://brtkkndrl.github.io/rust_webgl/">View on GitHub Pages</a>
 
 ## build:
 
