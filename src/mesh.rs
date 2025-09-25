@@ -1,4 +1,4 @@
-use nalgebra::{Point3, Vector3};
+use nalgebra::{Vector3};
 use std::{f32::{INFINITY, NEG_INFINITY}, str::FromStr};
 use web_sys::{console};
 use std::collections::HashMap;
@@ -31,7 +31,6 @@ impl Mesh{
         let mut faces : Vec<Face> = vec![];
 
         let mut is_triangulated = true;
-        let mut has_normals_defined = false;
         let mut found_simple_face_def = false;
         let mut found_complex_face_def = false;
 
@@ -116,8 +115,6 @@ impl Mesh{
                 faces.push(Face{verts: temp_vert_ids.clone()});
             }
         }else if found_complex_face_def{
-            has_normals_defined = true;
-
             let mut indexes_to_vert_ids: HashMap<(i32, i32, i32), usize> = HashMap::new();
 
             for obj_face in obj_faces{

@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use js_sys::Math::ceil;
 use shaders::{FSHADER_FLAT, FSHADER_SMOOTH, VSHADER_FLAT, VSHADER_SMOOTH};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as GL, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader};
@@ -495,29 +494,32 @@ impl Renderer {
                 }
             }
 
-            if self.is_bb_visible && let Some(bb_gl_buffers) = &rendered_mesh.bb_gl_buffers{            //render bounding box
-                let bb_vbo = &bb_gl_buffers.vbo;
-                let bb_ebo = &bb_gl_buffers.ebo;
 
-                let bb_ebo_size = bb_gl_buffers.ebo_size;
+            if self.is_bb_visible{
+                if let Some(bb_gl_buffers) = &rendered_mesh.bb_gl_buffers{            //render bounding box
+                    let bb_vbo = &bb_gl_buffers.vbo;
+                    let bb_ebo = &bb_gl_buffers.ebo;
 
-                let bb_program = &self.programs.program_lines;
+                    let bb_ebo_size = bb_gl_buffers.ebo_size;
 
-                gl.use_program(Some(bb_program));
+                    let bb_program = &self.programs.program_lines;
 
-                gl.bind_buffer(GL::ARRAY_BUFFER, Some(&bb_vbo));
-                gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&bb_ebo));
+                    gl.use_program(Some(bb_program));
 
-                let bb_pos_attrib = gl.get_attrib_location(&bb_program, "aPosition") as u32;
-                gl.vertex_attrib_pointer_with_i32(bb_pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
-                gl.enable_vertex_attrib_array(bb_pos_attrib);
+                    gl.bind_buffer(GL::ARRAY_BUFFER, Some(&bb_vbo));
+                    gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&bb_ebo));
 
-                let bb_object_color_loc = gl.get_uniform_location(&bb_program, "objectColor").unwrap();
-                gl.uniform3f(Some(&bb_object_color_loc), 1.0, 0.0, 0.0);
+                    let bb_pos_attrib = gl.get_attrib_location(&bb_program, "aPosition") as u32;
+                    gl.vertex_attrib_pointer_with_i32(bb_pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
+                    gl.enable_vertex_attrib_array(bb_pos_attrib);
 
-                self.pass_mvp_uniforms(&gl, &bb_program, &model, &view, &projection)?;
+                    let bb_object_color_loc = gl.get_uniform_location(&bb_program, "objectColor").unwrap();
+                    gl.uniform3f(Some(&bb_object_color_loc), 1.0, 0.0, 0.0);
 
-                gl.draw_elements_with_i32(GL::LINES, bb_ebo_size, GL::UNSIGNED_SHORT, 0);
+                    self.pass_mvp_uniforms(&gl, &bb_program, &model, &view, &projection)?;
+
+                    gl.draw_elements_with_i32(GL::LINES, bb_ebo_size, GL::UNSIGNED_SHORT, 0);
+                }
             }
         }
 
