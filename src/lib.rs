@@ -432,9 +432,6 @@ impl Renderer {
         self.last_time_step = current_time_step;
 
         self.anim_time_counter += delta_time;
-        if self.anim_time_counter > 1.0{
-            self.anim_time_counter = 1.0;
-        }
 
         if self.should_run_animation{
             self.run_animation()?;
@@ -558,6 +555,12 @@ impl Renderer {
                     gl.uniform3f(Some(&bb_object_color_loc), 1.0, 0.0, 0.0);
 
                     self.pass_mvp_uniforms(&gl, &bb_program, &model, &view, &projection)?;
+
+                    if let Some(anim_time_loc) = gl.get_uniform_location(&bb_program, "animTime") {
+                        gl.uniform1f(Some(&anim_time_loc), self.anim_time_counter);
+                    } else {
+                        web_sys::console::warn_1(&format!("Shader uniform {} not found", "animTime").into());
+                    }
 
                     gl.draw_elements_with_i32(GL::LINES, bb_ebo_size, GL::UNSIGNED_SHORT, 0);
                 }
