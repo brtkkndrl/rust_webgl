@@ -198,7 +198,8 @@ pub struct Renderer {
     screen_dimensions: Vector2<i32>,
     last_normal_attrib_pos: i32,
     last_time_step: f32,
-    anim_time_counter: f32
+    anim_time_counter: f32,
+    should_run_animation: bool
 }
 
 pub struct Camera {
@@ -294,7 +295,8 @@ impl Renderer {
             screen_dimensions: Vector2::new(canvas_dom_width, canvas_dom_height),
             last_normal_attrib_pos: -1,
             last_time_step: 0.0,
-            anim_time_counter: 0.0
+            anim_time_counter: 1.0,
+            should_run_animation: false,
         })
     }
 
@@ -314,6 +316,8 @@ impl Renderer {
         self.rendered_mesh = Some(RenderedMesh::new(gl, mesh, shading)?);
 
         //console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
+
+        self.should_run_animation = true;
 
         Ok(())
     }
@@ -377,6 +381,12 @@ impl Renderer {
     }
 
     #[wasm_bindgen]
+    pub fn run_animation(&mut self) -> Result<(), JsValue>{
+        self.anim_time_counter = 0.0;
+        Ok(())
+    }
+
+    #[wasm_bindgen]
     pub fn update(&mut self, mouse_down: bool, mouse_x: i32, mouse_y: i32, mouse_wheel: i32) ->Result<(), JsValue>{
         if mouse_down{
             if !self.is_mouse_down{ // set anchor
@@ -391,7 +401,6 @@ impl Renderer {
         self.is_mouse_down = mouse_down;
 
         self.camera.mouse_scroll(mouse_wheel as f32);
-
         // console::log_1(&format!("displaying mesh {:?}", mouse_wheel).into());
 
         Ok(())
@@ -411,14 +420,6 @@ impl Renderer {
         Ok(())
     }
 
-    fn pass_anim_time_uniform(&self, gl: &WebGl2RenderingContext, program: &WebGlProgram, anim_time: f32) -> Result<(), String>{    
-        // Pass Uniforms
-        let anim_time_loc = gl.get_uniform_location(program, "animTime").unwrap();
-        gl.uniform1f(Some(&anim_time_loc), anim_time);
-
-        Ok(())
-    }
-
     #[wasm_bindgen]
     pub fn render(&mut self) -> Result<(), JsValue> {
         if self.rendered_mesh.is_none() {
@@ -431,7 +432,14 @@ impl Renderer {
         self.last_time_step = current_time_step;
 
         self.anim_time_counter += delta_time;
-        console::log_1(&format!("time {}", self.anim_time_counter).into());
+        if self.anim_time_counter > 1.0{
+            self.anim_time_counter = 1.0;
+        }
+
+        if self.should_run_animation{
+            self.run_animation()?;
+            self.should_run_animation = false;
+        }
         // update anim time END
 
         let gl = &(self.gl);
@@ -451,11 +459,22 @@ impl Renderer {
             let view = self.camera.view_matrix();
             let model = Translation3::new(0.0, 0.0, 0.0).to_homogeneous();
 
-            let object_color_loc = gl.get_uniform_location(&program, "objectColor").unwrap();
-            gl.uniform3f(Some(&object_color_loc), 1.0, 1.0, 1.0);
+            // Pass uniforms BEGIN
+            if let Some(object_color_loc) = gl.get_uniform_location(&program, "objectColor") {
+                gl.uniform3f(Some(&object_color_loc), 1.0, 1.0, 1.0);
+            } else {
+                web_sys::console::warn_1(&format!("Shader uniform {} not found", "objectColor").into());
+            }
 
-            // Pass uniforms
+            if let Some(anim_time_loc) = gl.get_uniform_location(&program, "animTime") {
+                gl.uniform1f(Some(&anim_time_loc), self.anim_time_counter);
+            } else {
+                web_sys::console::warn_1(&format!("Shader uniform {} not found", "animTime").into());
+            }
+
             self.pass_mvp_uniforms(&gl, &program, &model, &view, &projection)?;
+            
+            // Pass uniforms END
             
 
             if rendered_mesh.shading != ShadingType::Wireframe{

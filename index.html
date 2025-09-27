@@ -44,22 +44,38 @@
                 });
         }
 
-        function changeShading(shading){
-            if(!is_renderer_free){
+        function withRenderer(taskFun) {
+            if (!is_renderer_free) {
                 return;
             }
+
             is_renderer_free = false;
-            renderer.change_shading(shading);
-            is_renderer_free = true;
+
+            taskFun();
+
+            try {
+                taskFun();
+            } finally {
+                is_renderer_free = true;
+            }
+        }
+
+        function changeShading(shading){
+            withRenderer(() => {
+                renderer.change_shading(shading);
+            });
         }
 
         function setBBVisible(visible){
-            if(!is_renderer_free){
-                return;
-            }
-            is_renderer_free = false;
-            renderer.set_bb_visible(visible);
-            is_renderer_free = true;
+            withRenderer(() => {
+                renderer.set_bb_visible(visible);
+            });
+        }
+
+        function runAnimation(){
+            withRenderer(() => {
+                renderer.run_animation();
+            });
         }
     </script>
 </head>
@@ -98,9 +114,9 @@
             <input type="checkbox" id = "bounding_box" onchange="setBBVisible(this.checked)">
         </form>
 
-        <button>animate</button>
-    </div> 
-
+        <button onclick="runAnimation()">animate</button>
+    </div>
+ 
     <script type="module">
         import init, {Renderer} from "./pkg/rust_webgl.js";
         

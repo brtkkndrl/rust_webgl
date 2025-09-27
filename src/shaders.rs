@@ -16,7 +16,7 @@ out vec3 FragPos;
 void main() {
     FragPos = vec3(model * vec4(aPosition, 1.0));
     Normal = normalMatrix * aNormal;
-    gl_Position = projection * view * vec4(FragPos, 1.0);
+    gl_Position = projection * view * vec4(FragPos * sin(animTime), 1.0);
 }";
 
 pub const FSHADER_FLAT: &str = 
@@ -62,7 +62,7 @@ out vec3 FragPos;
 void main() {
     FragPos = vec3(model * vec4(aPosition, 1.0));
     Normal = normalMatrix * aNormal;
-    gl_Position = projection * view * vec4(FragPos, 1.0);
+    gl_Position = projection * view * vec4(FragPos * sin(animTime), 1.0);
 }";
 
 pub const FSHADER_SMOOTH: &str = 
@@ -98,11 +98,13 @@ uniform mat4 projection;
 uniform mat4 view;
 uniform mat4 model;
 
+uniform float animTime;
+
 out vec3 FragPos;
 
 void main() {
     FragPos = vec3(model * vec4(aPosition, 1.0));
-    gl_Position = projection * view * vec4(FragPos, 1.0);
+    gl_Position = projection * view * vec4(FragPos * sin(animTime), 1.0);
 }";
 
 pub const FSHADER_LINE: &str = 
@@ -113,6 +115,8 @@ in vec3 FragPos;
 out vec4 outColor;
 
 uniform vec3 objectColor;
+
+uniform float animTime;
 
 void main() {
     outColor = vec4(objectColor, 1.0);

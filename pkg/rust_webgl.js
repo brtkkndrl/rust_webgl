@@ -209,6 +209,12 @@ export class Renderer {
             throw takeFromExternrefTable0(ret[0]);
         }
     }
+    run_animation() {
+        const ret = wasm.renderer_run_animation(this.__wbg_ptr);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
     /**
      * @param {boolean} mouse_down
      * @param {number} mouse_x
@@ -447,6 +453,9 @@ function __wbg_get_imports() {
         const ret = typeof window === 'undefined' ? null : window;
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
     };
+    imports.wbg.__wbg_uniform1f_0a141bee125b351e = function(arg0, arg1, arg2) {
+        arg0.uniform1f(arg1, arg2);
+    };
     imports.wbg.__wbg_uniform3f_16e5596ebd3b41a3 = function(arg0, arg1, arg2, arg3, arg4) {
         arg0.uniform3f(arg1, arg2, arg3, arg4);
     };
@@ -464,6 +473,9 @@ function __wbg_get_imports() {
     };
     imports.wbg.__wbg_viewport_08854654c5c2bba6 = function(arg0, arg1, arg2, arg3, arg4) {
         arg0.viewport(arg1, arg2, arg3, arg4);
+    };
+    imports.wbg.__wbg_warn_e2ada06313f92f09 = function(arg0) {
+        console.warn(arg0);
     };
     imports.wbg.__wbg_wbindgenbooleanget_3fe6f642c7d97746 = function(arg0) {
         const v = arg0;
