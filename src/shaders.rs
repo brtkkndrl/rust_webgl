@@ -98,8 +98,7 @@ void main() {
     float diff = max(dot(normalize(Normal), lightDir), 0.0);
     vec3 diffuse = diff * lightColor;
 
-    //outColor = vec4((ambient + diffuse) * objectColor, 1.0);
-    outColor = vec4((ambient + diffuse) * vec3(sin(animTime+0.5), sin(animTime+1.0), sin(animTime+1.5)), 1.0);
+    outColor = vec4((ambient + diffuse) * objectColor, 1.0);
 }";
 
 pub const VSHADER_LINE: &str = 

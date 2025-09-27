@@ -71,12 +71,6 @@
                 renderer.set_bb_visible(visible);
             });
         }
-
-        function runAnimation(){
-            withRenderer(() => {
-                renderer.run_animation();
-            });
-        }
     </script>
 </head>
 <body>
@@ -113,8 +107,6 @@
             <label for="bounding_box">show bounds: </label>
             <input type="checkbox" id = "bounding_box" onchange="setBBVisible(this.checked)">
         </form>
-
-        <button onclick="runAnimation()">animate</button>
     </div>
  
     <script type="module">

@@ -381,12 +381,6 @@ impl Renderer {
     }
 
     #[wasm_bindgen]
-    pub fn run_animation(&mut self) -> Result<(), JsValue>{
-        self.anim_time_counter = 0.0;
-        Ok(())
-    }
-
-    #[wasm_bindgen]
     pub fn update(&mut self, mouse_down: bool, mouse_x: i32, mouse_y: i32, mouse_wheel: i32) ->Result<(), JsValue>{
         if mouse_down{
             if !self.is_mouse_down{ // set anchor
@@ -434,7 +428,7 @@ impl Renderer {
         self.anim_time_counter += delta_time;
 
         if self.should_run_animation{
-            self.run_animation()?;
+            self.anim_time_counter = 0.0;
             self.should_run_animation = false;
         }
         // update anim time END

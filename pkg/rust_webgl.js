@@ -209,12 +209,6 @@ export class Renderer {
             throw takeFromExternrefTable0(ret[0]);
         }
     }
-    run_animation() {
-        const ret = wasm.renderer_run_animation(this.__wbg_ptr);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
-    }
     /**
      * @param {boolean} mouse_down
      * @param {number} mouse_x
