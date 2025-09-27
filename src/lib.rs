@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use js_sys::Math::ceil;
 use shaders::{FSHADER_FLAT, FSHADER_SMOOTH, VSHADER_FLAT, VSHADER_SMOOTH};
 use wasm_bindgen::prelude::*;
 use web_sys::{HtmlCanvasElement, WebGl2RenderingContext as GL, WebGl2RenderingContext, WebGlBuffer, WebGlProgram, WebGlShader};
@@ -197,7 +196,10 @@ pub struct Renderer {
     rendered_mesh: Option<RenderedMesh>,
     camera: Camera,
     screen_dimensions: Vector2<i32>,
-    last_normal_attrib_pos: i32
+    last_normal_attrib_pos: i32,
+    last_time_step: f32,
+    anim_time_counter: f32,
+    should_run_animation: bool
 }
 
 pub struct Camera {
@@ -291,7 +293,10 @@ impl Renderer {
             is_bb_visible: false,
             camera : Camera::new(Point3::new(0.0, 0.0, 10.0), Point3::new(0.0,0.0,0.0), Vector3::new(0.0,1.0,0.0)),
             screen_dimensions: Vector2::new(canvas_dom_width, canvas_dom_height),
-            last_normal_attrib_pos: -1
+            last_normal_attrib_pos: -1,
+            last_time_step: 0.0,
+            anim_time_counter: 1.0,
+            should_run_animation: false,
         })
     }
 
@@ -311,6 +316,8 @@ impl Renderer {
         self.rendered_mesh = Some(RenderedMesh::new(gl, mesh, shading)?);
 
         //console::log_1(&format!("displaying mesh {:?}v {:?}f", vertices.len()/3, indices.len()/3).into());
+
+        self.should_run_animation = true;
 
         Ok(())
     }
@@ -388,7 +395,6 @@ impl Renderer {
         self.is_mouse_down = mouse_down;
 
         self.camera.mouse_scroll(mouse_wheel as f32);
-
         // console::log_1(&format!("displaying mesh {:?}", mouse_wheel).into());
 
         Ok(())
@@ -414,6 +420,19 @@ impl Renderer {
             return Err(format!("No mesh loaded!").into());
         }
         
+        // update anim time BEGIN
+        let current_time_step = (window().unwrap().performance().unwrap().now() as f32) / 1000.0;
+        let delta_time = current_time_step-self.last_time_step;
+        self.last_time_step = current_time_step;
+
+        self.anim_time_counter += delta_time;
+
+        if self.should_run_animation{
+            self.anim_time_counter = 0.0;
+            self.should_run_animation = false;
+        }
+        // update anim time END
+
         let gl = &(self.gl);
 
         if let Some(ref rendered_mesh) = self.rendered_mesh{
@@ -431,11 +450,23 @@ impl Renderer {
             let view = self.camera.view_matrix();
             let model = Translation3::new(0.0, 0.0, 0.0).to_homogeneous();
 
-            let object_color_loc = gl.get_uniform_location(&program, "objectColor").unwrap();
-            gl.uniform3f(Some(&object_color_loc), 1.0, 1.0, 1.0);
+            // Pass uniforms BEGIN
+            if let Some(object_color_loc) = gl.get_uniform_location(&program, "objectColor") {
+                gl.uniform3f(Some(&object_color_loc), 1.0, 1.0, 1.0);
+            } else {
+                web_sys::console::warn_1(&format!("Shader uniform {} not found", "objectColor").into());
+            }
 
-            // Pass uniforms
+            if let Some(anim_time_loc) = gl.get_uniform_location(&program, "animTime") {
+                gl.uniform1f(Some(&anim_time_loc), self.anim_time_counter);
+            } else {
+                web_sys::console::warn_1(&format!("Shader uniform {} not found", "animTime").into());
+            }
+
             self.pass_mvp_uniforms(&gl, &program, &model, &view, &projection)?;
+            
+            // Pass uniforms END
+            
 
             if rendered_mesh.shading != ShadingType::Wireframe{
                 // Extract the 3x3 normal matrix
@@ -495,29 +526,38 @@ impl Renderer {
                 }
             }
 
-            if self.is_bb_visible && let Some(bb_gl_buffers) = &rendered_mesh.bb_gl_buffers{            //render bounding box
-                let bb_vbo = &bb_gl_buffers.vbo;
-                let bb_ebo = &bb_gl_buffers.ebo;
 
-                let bb_ebo_size = bb_gl_buffers.ebo_size;
+            if self.is_bb_visible{
+                if let Some(bb_gl_buffers) = &rendered_mesh.bb_gl_buffers{            //render bounding box
+                    let bb_vbo = &bb_gl_buffers.vbo;
+                    let bb_ebo = &bb_gl_buffers.ebo;
 
-                let bb_program = &self.programs.program_lines;
+                    let bb_ebo_size = bb_gl_buffers.ebo_size;
 
-                gl.use_program(Some(bb_program));
+                    let bb_program = &self.programs.program_lines;
 
-                gl.bind_buffer(GL::ARRAY_BUFFER, Some(&bb_vbo));
-                gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&bb_ebo));
+                    gl.use_program(Some(bb_program));
 
-                let bb_pos_attrib = gl.get_attrib_location(&bb_program, "aPosition") as u32;
-                gl.vertex_attrib_pointer_with_i32(bb_pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
-                gl.enable_vertex_attrib_array(bb_pos_attrib);
+                    gl.bind_buffer(GL::ARRAY_BUFFER, Some(&bb_vbo));
+                    gl.bind_buffer(GL::ELEMENT_ARRAY_BUFFER, Some(&bb_ebo));
 
-                let bb_object_color_loc = gl.get_uniform_location(&bb_program, "objectColor").unwrap();
-                gl.uniform3f(Some(&bb_object_color_loc), 1.0, 0.0, 0.0);
+                    let bb_pos_attrib = gl.get_attrib_location(&bb_program, "aPosition") as u32;
+                    gl.vertex_attrib_pointer_with_i32(bb_pos_attrib, 3, GL::FLOAT, false, 3 * 4, 0);
+                    gl.enable_vertex_attrib_array(bb_pos_attrib);
 
-                self.pass_mvp_uniforms(&gl, &bb_program, &model, &view, &projection)?;
+                    let bb_object_color_loc = gl.get_uniform_location(&bb_program, "objectColor").unwrap();
+                    gl.uniform3f(Some(&bb_object_color_loc), 1.0, 0.0, 0.0);
 
-                gl.draw_elements_with_i32(GL::LINES, bb_ebo_size, GL::UNSIGNED_SHORT, 0);
+                    self.pass_mvp_uniforms(&gl, &bb_program, &model, &view, &projection)?;
+
+                    if let Some(anim_time_loc) = gl.get_uniform_location(&bb_program, "animTime") {
+                        gl.uniform1f(Some(&anim_time_loc), self.anim_time_counter);
+                    } else {
+                        web_sys::console::warn_1(&format!("Shader uniform {} not found", "animTime").into());
+                    }
+
+                    gl.draw_elements_with_i32(GL::LINES, bb_ebo_size, GL::UNSIGNED_SHORT, 0);
+                }
             }
         }
 

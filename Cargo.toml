@@ -11,7 +11,7 @@ web-sys = { version = "0.3", features = [
     "Document", "Window", "HtmlCanvasElement",
     "WebGl2RenderingContext", "WebGlProgram",
     "WebGlShader", "WebGlBuffer",
-    "Response", "Request", "RequestInit", "RequestMode", "Headers", "console",
+    "Response", "Request", "RequestInit", "RequestMode", "Headers", "console", "Performance",
     "WebGlRenderingContext", "WebGlUniformLocation"
 ] }
 once_cell = "1.9.0"
