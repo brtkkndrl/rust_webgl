@@ -196,7 +196,9 @@ pub struct Renderer {
     rendered_mesh: Option<RenderedMesh>,
     camera: Camera,
     screen_dimensions: Vector2<i32>,
-    last_normal_attrib_pos: i32
+    last_normal_attrib_pos: i32,
+    last_time_step: f32,
+    anim_time_counter: f32
 }
 
 pub struct Camera {
@@ -290,7 +292,9 @@ impl Renderer {
             is_bb_visible: false,
             camera : Camera::new(Point3::new(0.0, 0.0, 10.0), Point3::new(0.0,0.0,0.0), Vector3::new(0.0,1.0,0.0)),
             screen_dimensions: Vector2::new(canvas_dom_width, canvas_dom_height),
-            last_normal_attrib_pos: -1
+            last_normal_attrib_pos: -1,
+            last_time_step: 0.0,
+            anim_time_counter: 0.0
         })
     }
 
@@ -407,12 +411,29 @@ impl Renderer {
         Ok(())
     }
 
+    fn pass_anim_time_uniform(&self, gl: &WebGl2RenderingContext, program: &WebGlProgram, anim_time: f32) -> Result<(), String>{    
+        // Pass Uniforms
+        let anim_time_loc = gl.get_uniform_location(program, "animTime").unwrap();
+        gl.uniform1f(Some(&anim_time_loc), anim_time);
+
+        Ok(())
+    }
+
     #[wasm_bindgen]
     pub fn render(&mut self) -> Result<(), JsValue> {
         if self.rendered_mesh.is_none() {
             return Err(format!("No mesh loaded!").into());
         }
         
+        // update anim time BEGIN
+        let current_time_step = (window().unwrap().performance().unwrap().now() as f32) / 1000.0;
+        let delta_time = current_time_step-self.last_time_step;
+        self.last_time_step = current_time_step;
+
+        self.anim_time_counter += delta_time;
+        console::log_1(&format!("time {}", self.anim_time_counter).into());
+        // update anim time END
+
         let gl = &(self.gl);
 
         if let Some(ref rendered_mesh) = self.rendered_mesh{
@@ -435,6 +456,7 @@ impl Renderer {
 
             // Pass uniforms
             self.pass_mvp_uniforms(&gl, &program, &model, &view, &projection)?;
+            
 
             if rendered_mesh.shading != ShadingType::Wireframe{
                 // Extract the 3x3 normal matrix

@@ -8,6 +8,8 @@ uniform mat4 view;
 uniform mat4 model;
 uniform mat3 normalMatrix;
 
+uniform float animTime;
+
 flat out vec3 Normal;
 out vec3 FragPos;
 
@@ -28,6 +30,8 @@ out vec4 outColor;
 uniform vec3 lightPos;
 uniform vec3 lightColor;
 uniform vec3 objectColor;
+
+uniform float animTime;
 
 void main() {
     float ambientStrength = 0.1;
@@ -50,6 +54,8 @@ uniform mat4 view;
 uniform mat4 model;
 uniform mat3 normalMatrix;
 
+uniform float animTime;
+
 out vec3 Normal;
 out vec3 FragPos;
 
@@ -70,6 +76,8 @@ out vec4 outColor;
 uniform vec3 lightPos;
 uniform vec3 lightColor;
 uniform vec3 objectColor;
+
+uniform float animTime;
 
 void main() {
     float ambientStrength = 0.1;
