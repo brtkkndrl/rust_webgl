@@ -1,4 +1,4 @@
-## Simple .obj viewer for the browser using WebGL 2
+## Simple .obj viewer using WebGL 2
 
 <a href="https://brtkkndrl.github.io/rust_webgl/">View on GitHub Pages</a>
 
